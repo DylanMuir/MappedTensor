@@ -230,13 +230,22 @@ classdef TIFFStack < handle
                         '*** TIFFStack: The planar configuration of this TIFF stack is not supported.');
                end
                
-               % - Use versions for pre-2014 matlab
-               if (verLessThan('matlab', '8.3'))
+               % - Check for zero-based referencing
+               try
+                   tifflib('computeStrip', oStack.TIF, 0);
+               catch
                   strReadFun = [strReadFun '_pre2014'];
                end
                
                % - Convert into function handle
                oStack.fhReadFun = str2func(strReadFun);
+               
+               % - Fix up rows per strip (inconsistency between Windows and
+               % OS X Tifflib
+               nRowsPerStrip = TiffgetTag(oStack.TIF, 'RowsPerStrip');
+               if (nRowsPerStrip ~= oStack.sImageInfo(1).RowsPerStrip)
+                   [oStack.sImageInfo.RowsPerStrip] = deal(nRowsPerStrip);
+               end
                
             else
                % - Read TIFF header for tiffread29
@@ -282,6 +291,16 @@ classdef TIFFStack < handle
          end
       end
 
+      % diagnostic - METHOD Display some diagnostics about a stack
+      function diagnostic(oStack)
+         disp(oStack);
+         fprintf('<strong>Private properties:</strong>\n');
+         fprintf('   bUseTiffLib: %d\n', oStack.bUseTiffLib);
+         fprintf('   fhReadFun: %s\n', func2str(oStack.fhReadFun));
+         fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
+         fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
+      end
+      
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
@@ -295,10 +314,6 @@ classdef TIFFStack < handle
                nNumTotalDims = numel(oStack.vnDimensionOrder);
                vnReferencedTensorSize = size(oStack);
 
-%                nNumDims = numel(S.subs);
-% %                nNumStackDims = numel(oStack.vnDataSize);
-%                nNumTotalDims = numel(oStack.vnDimensionOrder);
-               
                bLinearIndexing = false;
 
                % - Check dimensionality and trailing dimensions
@@ -306,7 +321,9 @@ classdef TIFFStack < handle
                   % - Translate colon indexing
                   if (iscolon(S.subs{1}))
                      S.subs = num2cell(repmat(':', 1, nNumTotalDims));
-                     nNumDims = 4;
+                     vnRetDataSize = [prod(vnReferencedTensorSize), 1];
+                     
+                     bLinearIndexing = false;
 
                   else
                      % - Get equivalent subscripted indexes and permute
@@ -319,9 +336,11 @@ classdef TIFFStack < handle
                      end
                      vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
+                     vnRetDataSize = [numel(S.subs{1}) 1];
+
+                     bLinearIndexing = true;
                   end
                   
-                  bLinearIndexing = true;
                   
                elseif (nNumDims < nNumTotalDims)
                   % - Wrap up trailing dimensions, matlab style, using linear indexing
@@ -337,13 +356,12 @@ classdef TIFFStack < handle
                   % - Inverse permute index order
                   vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
-                  
-%                   if (numel(vnDataSize) == 1)
-%                      vnDataSize(2) = 1;
-%                   end
-                  
+                                    
                elseif (nNumDims == nNumTotalDims)
-                  % - Simply permute and access tensor
+                  % - Check for colon references
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  vnRetDataSize = cellfun(@numel, S.subs);                  
+                  vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
                   vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
@@ -351,24 +369,45 @@ classdef TIFFStack < handle
                   
                else % (nNumDims > nNumTotalDims)
                   % - Check for non-colon references
-                  vbNonColon = ~cellfun(@iscolon, S.subs);
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  
+                  % - Check for non-unitary references
+                  vbIsUnitary = cellfun(@(c)(isequal(c, 1)), S.subs);
+                  
+                  % - Check for non-empty references
+                  vbIsEmpty = cellfun(@isempty, S.subs);
                   
                   % - Check only trailing dimensions
-                  vbNonColon(1:nNumTotalDims) = false;
+                  vbTrailing = [false(1, nNumTotalDims) true(1, nNumDims-nNumTotalDims)];
                   
-                  % - Check trailing dimensions for non-'1' indices
-                  if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
+                  % - Check trailing dimensions for inappropriate indices
+                  if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
                      % - This is an error
                      error('TIFFStack:badsubscript', ...
                         '*** TIFFStack: Index exceeds stack dimensions.');
                   end
                   
-                  % - Only keep relevant dimensions
-                  S.subs = S.subs(1:nNumTotalDims);
+                  % - Catch empty refs
+                  if (~any(vbIsEmpty))
+                     % - Only keep relevant dimensions
+                     S.subs = S.subs(1:nNumTotalDims);
+                  end
+                  
+                  vnReferencedTensorSize(nNumTotalDims+1:nNumDims) = 1;
+                  vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
+                  vbIsColon = cellfun(@iscolon, S.subs);
+                  vnRetDataSize = cellfun(@numel, S.subs);
+                  vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+               end
+               
+               % - Catch empty refs
+               if (prod(vnRetDataSize) == 0)
+                  tfData = zeros(vnRetDataSize);
+                  return;
                end
                
                % - Access stack (tifflib or tiffread)
@@ -385,7 +424,7 @@ classdef TIFFStack < handle
                
                % - Reshape return data to concatenate trailing dimensions (just as
                % matlab does)
-               if (nNumDims > 1) && (nNumDims < nNumTotalDims)
+               if (~isequal(size(tfData), vnRetDataSize))
                   tfData = reshape(tfData, vnRetDataSize);
                end
                
@@ -398,7 +437,11 @@ classdef TIFFStack < handle
          end
       end
       
-%% --- Overloaded size, permute, ipermute, ctranspose, transpose
+%% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose
+      function [n] = numel(oStack)
+         n = prod(size(oStack)); %#ok<PSIZE>
+      end
+
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
          vnDataSize = oStack.vnDataSize; %#ok<PROP>
@@ -675,7 +718,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       vnFrameLinearIndices = sub2ind(vnBlockSize([1 2 4]), cIndices{1}, cIndices{2}, cIndices{4});
       
       % - Loop over images in stack and extract required frames
-      try
+%       try
          for (nImage = unique(cIndices{3})')
             % - Find corresponding pixels
             vbThesePixels = cIndices{3} == nImage;
@@ -687,13 +730,13 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
             [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
          end
          
-      catch mErr
-         % - Record error state
-         base_ME = MException('TIFFStack:ReadError', ...
-            '*** TIFFStack: Could not read data from image file.');
-         new_ME = addCause(base_ME, mErr);
-         throw(new_ME);
-      end
+%       catch mErr
+%          % - Record error state
+%          base_ME = MException('TIFFStack:ReadError', ...
+%             '*** TIFFStack: Could not read data from image file.');
+%          new_ME = addCause(base_ME, mErr);
+%          throw(new_ME);
+%       end
    end
    
    % - Invert data if requested
@@ -1040,7 +1083,7 @@ function [hRepSumFunc] = GetMexFunctionHandles
          strCWD = cd(fullfile(strMTDir, 'private'));
          
          % - Try to compile the MEX functions
-         disp('--- MappedTensor: Compiling MEX functions.');
+         disp('--- TIFFStack: Compiling MEX functions.');
          mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
          
          % - Move back to previous working directory
