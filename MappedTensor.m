@@ -364,8 +364,7 @@ classdef MappedTensor < handle
                end
                
                % - Get equivalent subscripted indexes
-               vnTensorSize = size(mtVar);
-               [cIndices{1:nNumDims}] = ind2sub(vnTensorSize, S.subs{1});
+               [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
                
                % - Permute indices and convert back to linear indexing
                vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
@@ -432,7 +431,10 @@ classdef MappedTensor < handle
          
          % - Reshape return data to concatenate trailing dimensions (just as
          % matlab does)
-         if (nNumDims < nNumTotalDims)
+         if (nNumDims == 1)
+            tfData = reshape(tfData, [], 1);
+            
+         elseif (nNumDims < nNumTotalDims)
             cnSize = num2cell(size(tfData));
             tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
          end
@@ -448,7 +450,6 @@ classdef MappedTensor < handle
          % - Test real/complex nature of input and current tensor
          if (~isreal(tfData))
             % - The input data is complex
-            
             if (~mtVar.bIsComplex)
                make_complex(mtVar);
             end
@@ -1559,13 +1560,8 @@ function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strCl
 
    % - Catch "read whole tensor" condition
    if (all(cellfun(@iscolon, sSubs.subs)))
-      nNumStackElems = prod(vnTensorSize);
-      vnFileChunkIndices = [1 1 nNumStackElems];
-      tData = 1:nNumStackElems;     % Use a pre-allocated vector to save memory
-      
       % - Read data
-      tData = hShimFunc('read_chunks', hDataFile, vnFileChunkIndices, ...
-         tData, tData, vnTensorSize, ...
+      tData = hShimFunc('read_all', hDataFile, vnTensorSize, ...
          strClass, nHeaderBytes, double(bBigEndian));
             
       % - Reshape stack and return
@@ -1592,13 +1588,8 @@ function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHea
 
    % - Catch "read whole tensor" condition
    if (all(cellfun(@iscolon, sSubs.subs)))
-      nNumStackElems = prod(vnTensorSize);
-      vnFileChunkIndices = [1 1 nNumStackElems];
-      vnLinearIndices = 1:nNumStackElems;
-      
       % - Write data and return
-      hShimFunc('write_chunks', hDataFile, vnFileChunkIndices, ...
-         vnLinearIndices, vnTensorSize, ...
+      hShimFunc('write_all', hDataFile, vnTensorSize, ...
          strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
       return;
    end
@@ -1734,9 +1725,14 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
    % - Find colon references
    vbIsColon = cellfun(@iscolon, cRefs);
    
+   % - Catch "reference whole stack" condition
    if (all(vbIsColon))
       vnLinearIndices = 1:prod(vnLims);
-      vnDimRefSizes = vnLims;
+      if (numel(cRefs) == 1)
+         vnDimRefSizes = [vnLims 1];
+      else
+         vnDimRefSizes = vnLims;
+      end
       return;
    end
    
@@ -1782,6 +1778,11 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
          vnLinearIndices(1:nThisWindowLength) = hRepSumFunc(vnLinearIndices(1:nCurrWindowLength), (cRefs{nDimension}-1) * vnDimOffsets(nDimension));
       end
    end
+   
+   if (numel(vnDimRefSizes) == 1) % && ~any(vbIsColon)
+      vnDimRefSizes = size(cRefs{1});
+   end
+   
 end
 
 % SplitFileChunks - FUNCTION Split a set of indices into contiguous chunks
