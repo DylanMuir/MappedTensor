@@ -510,7 +510,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          
       } else {
       
-			dprintf("mts/crc: Single-element skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
+			   dprintf("mts/crc: Single-element skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
 			
          /* - Read an element, then skip elements */
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {

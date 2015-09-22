@@ -149,6 +149,7 @@ classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = private)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
+      bReadOnly = false;      % Should the data be protected from writing?
       hRealContent;           % File handle for data (real part)
       hCmplxContent;          % File handle for data (complex part)
       bTemporary;             % A flag which records whether a temporary file was created by MappedTensor
@@ -195,6 +196,12 @@ classdef MappedTensor < handle
                   case {'machineformat'}
                      % - The machine format was specifed
                      mtVar.strMachineFormat = varargin{nArg+1};
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
+                  case {'readonly'}
+                     % - Read-only or read/write status was specified
+                     mtVar.bReadOnly = logical(varargin{nArg+1});
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -447,6 +454,11 @@ classdef MappedTensor < handle
       
       % subsasgn - METHOD Overloaded subsasgn
       function [mtVar] = subsasgn(mtVar, subs, tfData)
+         % - Test read-only status if tensor
+         if (mtVar.bReadOnly)
+            error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
+         end
+         
          % - Test real/complex nature of input and current tensor
          if (~isreal(tfData))
             % - The input data is complex
@@ -576,6 +588,36 @@ classdef MappedTensor < handle
       % isreal - METHOD Overloaded isreal function
       function [bIsReal] = isreal(mtVar)
          bIsReal = ~mtVar.bIsComplex;
+      end
+      
+      % islogical - METHOD Overloaded islogical function
+      function [bIsLogical] = islogical(mtVar)
+         bIsLogical = isequal(mtVar.strClass, 'logical');
+      end
+      
+      % isnumeric - METHOD Overloaded isnumeric function
+      function [bIsNumeric] = isnumeric(mtVar)
+         bIsNumeric = ~islogical(mtVar);
+      end
+      
+      % isscalar - METHOD Overloaded isscalar function
+      function [bIsScalar] = isscalar(mtVar)
+         bIsScalar = numel(mtVar) == 1;
+      end
+      
+      % ismatrix - METHOD Overloaded ismatrix function
+      function [bIsMatrix] = ismatrix(mtVar)
+         bIsMatrix = ~isscalar(mtVar);
+      end
+      
+      % ischar - METHOD Overloaded ischar function
+      function [bIsChar] = ischar(mtVar)
+         bIsChar = isequal(mtVar.strClass, 'char');
+      end
+      
+      % isnan - METHOD Overloaded isnan function
+      function [bIsNan] = isnan(mtVar) %#ok<MANU>
+         bIsNan = false;
       end
       
       %% Overloaded methods (uminus, uplus, times, mtimes, ldivide, rdivide, mldivide, mrdivide)
