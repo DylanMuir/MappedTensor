@@ -363,6 +363,12 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 		for (uChunkElemIndex = 0, vnSubs[1] = 0; uChunkElemIndex < 3; uChunkElemIndex++, vnSubs[1]++) {
 			dprintf("[%d]", (uint64_t) mfFileChunkIndices[mxCalcSingleSubscript(prhs[2], 2, vnSubs)]);
 		}
+
+      if (uChunkIndex > 20) {
+         dprintf("...\n");
+         break;
+      }
+
 		dprintf("\n");
 	}
 	
@@ -463,7 +469,7 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          uUniqueDataPtr += nDataElemSize * uChunkSize;
          
       } else if (uChunkSkip < 5) {
-         dprintf("mts/crc: Consolidated skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
+         dprintf("mts/crc: Consolidated skip-read: read [%ld] elements, [%ld] bytes per element, skip [%ld] bytes.\n", uChunkSize, nDataElemSize, nDataElemSize * (uChunkSkip-1));
          
          if ((vuConsolidatedData = (uint8_t *) malloc(nDataElemSize * uChunkSize * uChunkSkip)) == NULL) {
             errprintf("MappedTensor:mapped_tensor_shim:Memory",
@@ -505,12 +511,12 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
          free(vuConsolidatedData);
          
          /* - Increment data pointer */
-         uUniqueDataPtr = uUniqueDataPtr + uChunkSize * nDataElemSize * (uChunkSkip-1);
+         uUniqueDataPtr = uUniqueDataPtr + uChunkSize * nDataElemSize;
          
          
       } else {
       
-			   dprintf("mts/crc: Single-element skip-read: read [%ld] bytes per element, skip [%ld] bytes.\n", nDataElemSize, nDataElemSize * (uChunkSkip-1));
+			dprintf("mts/crc: Single-element skip-read: read [%ld] elements, [%ld] bytes per element, skip [%ld] bytes.\n", uChunkSize, nDataElemSize, nDataElemSize * (uChunkSkip-1));
 			
          /* - Read an element, then skip elements */
          for (uElementIndex = 0; uElementIndex < uChunkSize; uElementIndex++) {
