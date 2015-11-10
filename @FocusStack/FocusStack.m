@@ -201,6 +201,11 @@ classdef FocusStack < handle
       
       % get.fBlankTime - GETTER for 'tBlankTime'
       function [tBlankTime] = get.tBlankTime(oStack)
+         if (~isfield(oStack.vsHeaders, 'tBlankTime') || isempty(oStack.vsHeaders))
+            tBlankTime = [];
+            return;
+         end
+         
          vtBlankTimes = [oStack.vsHeaders.tBlankTime];
          
          if (isempty(vtBlankTimes))
