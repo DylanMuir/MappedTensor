@@ -514,6 +514,7 @@ classdef MappedTensor < handle
             end
             
             % - Return the specified dimension(s)
+            vnSize(end+1:max(vnDimensions)) = 1;
             vnSize = vnSize(vnDimensions);
          end
          
