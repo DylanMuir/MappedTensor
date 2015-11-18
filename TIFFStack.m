@@ -1,8 +1,8 @@
 % TIFFStack - Manipulate a TIFF file like a tensor
 % 
-% Usage: tsStack = TIFFStack(strFilename <, bInvert>)
+% Usage: tsStack = TIFFStack(strFilename <, bInvert, vnInterleavedFrameDims>)
 % 
-% A TIFFStack object behaves like a read-only memory mapped TIF file.  The
+% A TIFFStack object behaves like a read-only memory mapped TIFF file.  The
 % entire image stack is treated as a matlab tensor.  Each frame of the file must
 % have the same dimensions.  Reading the image data is optimised to the extent
 % possible; the header information is only read once.
@@ -22,6 +22,19 @@
 % permute, ipermute and transpose are now transparantly supported. Note
 % that to read a pixel, the entire frame containing that pixel is read. So
 % reading a Z-slice of the stack will read in the entire stack.
+%
+% Some TIFF file writing software introduces custom or poorly-formed tags.
+% This causes tifflib to produce lots of warnings. These warnings can be
+% ignored by setting:
+%
+% >> w = warning('off', 'MATLAB:imagesci:tiffmexutils:libtiffWarning');
+% >> warning('off', 'MATLAB:imagesci:tifftagsread:expectedTagDataFormat');
+%
+% and later restored with:
+%
+% >> warning(w);
+%
+% -------------------------------------------------------------------------
 % 
 % Construction:
 % 
@@ -54,7 +67,62 @@
 % >> tsStack(4);           % Linear indexing is supported
 % 
 % >> tsStack.bInvert = true;  % Turn on data inversion
+%
+% >> getFilename(tsStack)  % Retrieve the 'strFilename' property
+% >> getInvert(tsStack)    % Retrive the 'bInvert' property
+% >> getImageInfo(tsStack) % Retrieve the 'sImageInfo' property
+% >> getDataClass(tsStack) % Retrive the 'strDataClass' property
 % 
+% -------------------------------------------------------------------------
+%
+% De-interleaving frame dimensions in complex stacks
+%
+% Some TIFF generation software stores multiple samples per pixel as
+% interleaved frames in a TIFF file. Other complex stacks may include
+% multiple different images per frame of time (e.g. multiple cameras or
+% different imaged locations per frame). TIFFStack allows these files to be
+% de-interleaved, such that each conceptual data dimension has its own
+% referencing dimension within matlab.
+%
+% This functionality uses the optional 'vnInterleavedFrameDims' argument.
+% This is a vector of dimensions that were interleaved into the single
+% frame dimension in the stack.
+%
+% For example, a stack contains 2 channels of data per pixel, and 3 imaged
+% locations per frame, all interleaved into the TIFF frame dimension. The
+% stack contains 10 conceptual frames, and each frame contains 5x5 pixels.
+%
+% The stack is therefore conceptually of dimensions [5 5 2 3 10 1], but
+% appears on disk with dimensions [5 5 60 1]. (The final dimension
+% corresponds to the samples-per-pixel dimension of the TIFF file).
+%
+% >> tsStack = TIFFStack('file.tif', [], [2 3 10]);
+% >> size(tsStack)
+%
+% ans =
+%
+%     5    5    2    3   10
+%
+% Permutation and indexing now works seamlessly on this stack, with each
+% conceptual dimension de-interleaved.
+%
+% If desired, the final number of frames can be left off
+% 'vnInterleavedFrameDims'; for example:
+%
+% >> tsStack = TIFFStack('file.tif', [], [2 3]);
+% >> size(tsStack)
+%
+% ans =
+%
+%     5    5    2    3   10
+%
+% Note: You must be careful that you specify the dimensions in the
+% appropriate order, as interleaved in the stack. Also, if the stack
+% contains multiple samples per pixel in native TIFF format, the
+% samples-per-pixel dimension will always be pushed to the final dimension.
+%
+% -------------------------------------------------------------------------
+%
 % References:
 % [1] Francois Nedelec, Thomas Surrey and A.C. Maggs. Physical Review Letters
 %        86: 3192-3195; 2001. DOI: 10.1103/PhysRevLett.86.3192
@@ -77,22 +145,30 @@ classdef TIFFStack < handle
    
    properties (SetAccess = private, GetAccess = private)
       vnDataSize;          % - Cached size of the TIFF stack
-      TIF;                 % \_ Cached header infor for tiffread29 speedups
+      vnApparentSize;      % - Apparent size of the TIFF stack
+      TIF;                 % \_ Cached header info for tiffread29 speedups
       HEADER;              % /
       bUseTiffLib;         % - Flag indicating whether TiffLib is being used
       fhReadFun;           % - When using Tiff class, function for reading data
+      fhSetDirFun;         % - When using Tiff class, function for setting the directory
       vnDimensionOrder;    % - Internal dimensions order to support permution
       fhRepSum;            % - Function handle to (hopefully) accellerated repsum function
+      fhCastFun;           % - The matlab function that casts data to the required return class
    end
    
    methods
       % TIFFStack - CONSTRUCTOR
-      function oStack = TIFFStack(strFilename, bInvert)
+      function oStack = TIFFStack(strFilename, bInvert, vnInterleavedFrameDims, bForceTiffread)
          % - Check usage
          if (~exist('strFilename', 'var') || ~ischar(strFilename))
             help TIFFStack;
             error('TIFFStack:Usage', ...
                   '*** TIFFStack: Incorrect usage.');
+         end
+         
+         % - Should we force TIFFStack to use tiffread, rather than libTiff?
+         if (~exist('bForceTiffread', 'var') || isempty(bForceTiffread))
+            bForceTiffread = false;
          end
          
          % - Can we use the accelerated TIFF library?
@@ -103,7 +179,7 @@ classdef TIFFStack < handle
             copyfile(strTiffLibLoc, fullfile(strTIFFStackLoc, 'private'), 'f');
          end
          
-         oStack.bUseTiffLib = (exist('tifflib') == 3); %#ok<EXIST>
+         oStack.bUseTiffLib = (exist('tifflib') == 3) & ~bForceTiffread; %#ok<EXIST>
          
          if (~oStack.bUseTiffLib)
             warning('TIFFStack:SlowAccess', ...
@@ -114,11 +190,19 @@ classdef TIFFStack < handle
          oStack.fhRepSum = GetMexFunctionHandles;
          
          % - Check for inversion flag
-         if (~exist('bInvert', 'var'))
+         if (~exist('bInvert', 'var') || isempty(bInvert))
             bInvert = false;
          end
          oStack.bInvert = bInvert;
          
+         % - Check for frame dimensions
+         if (~exist('vnInterleavedFrameDims', 'var'))
+            vnInterleavedFrameDims = [];
+         else
+            validateattributes(vnInterleavedFrameDims, {'single', 'double'}, {'integer', 'real', 'positive'}, ...
+               'TIFFStack', 'vnInterleavedFrameDims');
+         end
+
          % - See if filename exists
          if (~exist(strFilename, 'file'))
             error('TIFFStack:InvalidFile', ...
@@ -152,7 +236,7 @@ classdef TIFFStack < handle
                      switch (sInfo(1).BitsPerSample(1))
                         case 1
                            oStack.strDataClass = 'logical';
-                           
+
                         case 8
                            oStack.strDataClass = 'uint8';
                            
@@ -210,6 +294,9 @@ classdef TIFFStack < handle
                            '*** TIFFStack: The sample format of this TIFF stack is not supported.');
                end
                
+               % -- Assign casting function
+               oStack.fhCastFun = str2func(oStack.strDataClass);
+               
                % -- Assign accelerated reading function
                strReadFun = 'TS_read_Tiff';
                
@@ -230,15 +317,19 @@ classdef TIFFStack < handle
                         '*** TIFFStack: The planar configuration of this TIFF stack is not supported.');
                end
                
+               strSetDirFun = 'TS_set_directory';
+               
                % - Check for zero-based referencing
                try
                    tifflib('computeStrip', oStack.TIF, 0);
                catch
                   strReadFun = [strReadFun '_pre2014'];
+                  strSetDirFun = [strSetDirFun '_pre2014'];
                end
                
-               % - Convert into function handle
+               % - Convert into function handles
                oStack.fhReadFun = str2func(strReadFun);
+               oStack.fhSetDirFun = str2func(strSetDirFun);
                
                % - Fix up rows per strip (inconsistency between Windows and
                % OS X Tifflib
@@ -263,9 +354,32 @@ classdef TIFFStack < handle
             
             % - Record stack size
             oStack.vnDataSize = [sInfo(1).Height sInfo(1).Width numel(sInfo) sInfo(1).SamplesPerPixel];
-
+            
+            % - Initialize apparent stack size, de-interleaving along the frame dimension
+            if isempty(vnInterleavedFrameDims)
+               % - No de-interleaving
+               oStack.vnApparentSize = oStack.vnDataSize;
+            
+            elseif (prod(vnInterleavedFrameDims) ~= oStack.vnDataSize(3))
+               % - Be lenient by allowing frames dimension to be left out of arguments
+               if (mod(oStack.vnDataSize(3), prod(vnInterleavedFrameDims)) == 0)
+                  % - Work out number of apparent frames
+                  nNumApparentFrames = oStack.vnDataSize(3) ./ prod(vnInterleavedFrameDims);
+                  oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' nNumApparentFrames oStack.vnDataSize(4)];
+                  
+               else
+                  % - Incorrect total number of deinterleaved frames
+                  error('TIFFStack:WrongFrameDims', ...
+                     '*** TIFFStack: When de-interleaving a stack, the total number of frames must not change.');
+               end
+               
+            else
+               % - Record apparent stack dimensions
+               oStack.vnApparentSize = [oStack.vnDataSize(1:2) vnInterleavedFrameDims(:)' oStack.vnDataSize(4)];
+            end
+            
             % - Initialise dimension order
-            oStack.vnDimensionOrder = 1:numel(oStack.vnDataSize);
+            oStack.vnDimensionOrder = 1:numel(oStack.vnApparentSize);
 
          catch mErr
             base_ME = MException('TIFFStack:InvalidFile', ...
@@ -279,7 +393,7 @@ classdef TIFFStack < handle
       function delete(oStack)
          if (oStack.bUseTiffLib)
             % - Close the TIFF file, if opened by TiffLib
-            if (isfield(oStack, 'TIF') && ~isempty(oStack.TIF))
+            if (~isempty(oStack.TIF))
                tifflib('close', oStack.TIF);
             end
 
@@ -300,7 +414,7 @@ classdef TIFFStack < handle
          fprintf('   vnDimensionOrder: ['); fprintf('%d ', oStack.vnDimensionOrder); fprintf(']\n');
          fprintf('   fhRepSum: %s\n', func2str(oStack.fhRepSum));
       end
-      
+
 %% --- Overloaded subsref
 
       function [tfData] = subsref(oStack, S)
@@ -309,65 +423,86 @@ classdef TIFFStack < handle
                % - Test for valid subscripts
                cellfun(@isvalidsubscript, S.subs);
                
-               % - Re-order reference indices
-               nNumDims = numel(S.subs);
-               nNumTotalDims = numel(oStack.vnDimensionOrder);
+               % - Record stack size
+               nNumRefDims = numel(S.subs);
+               
                vnReferencedTensorSize = size(oStack);
-
+               nNumNZStackDims = numel(vnReferencedTensorSize);
+               nNumTotalStackDims = max(numel(oStack.vnDimensionOrder), nNumNZStackDims);
+               
+               vnFullTensorSize = vnReferencedTensorSize;
+               vnFullTensorSize(nNumNZStackDims+1:nNumTotalStackDims) = 1;
+               vnFullTensorSize(vnFullTensorSize == 0) = 1;
+               
                bLinearIndexing = false;
+               
+               % - Convert logical indexing to indices
+               for (nDim = 1:numel(S.subs))
+                  if (islogical(S.subs{nDim}))
+                     S.subs{nDim} = find(S.subs{nDim});
+                  end
+               end
 
                % - Check dimensionality and trailing dimensions
-               if (nNumDims == 1)
-                  % - Translate colon indexing
+               if (nNumRefDims == 1)
+                  % - Catch "read whole stack" case
                   if (iscolon(S.subs{1}))
-                     S.subs = num2cell(repmat(':', 1, nNumTotalDims));
+                     S.subs = num2cell(repmat(':', 1, nNumNZStackDims));
                      vnRetDataSize = [prod(vnReferencedTensorSize), 1];
-                     
-                     bLinearIndexing = false;
 
                   else
                      % - Get equivalent subscripted indexes and permute
                      vnTensorSize = size(oStack);
-                     try
-                        [cIndices{1:nNumTotalDims}] = ind2sub(vnTensorSize, S.subs{1});
-                     catch
-                        error('TIFFStack:InvalidRef', ...
-                           '*** TIFFStack: Subscript out of range.');
+                     if any(S.subs{1}(:) > prod(vnTensorSize))
+                        error('TIFFStack:badsubscript', ...
+                           '*** TIFFStack: Index exceeds stack dimensions.');
+                     else
+                        [cIndices{1:nNumTotalStackDims}] = ind2sub(vnTensorSize, S.subs{1});
                      end
-                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                     
+                     % - Permute dimensions
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                      S.subs = cIndices(vnInvOrder(vnInvOrder ~= 0));
-                     vnRetDataSize = [numel(S.subs{1}) 1];
+                     vnRetDataSize = size(S.subs{1});
 
                      bLinearIndexing = true;
                   end
                   
                   
-               elseif (nNumDims < nNumTotalDims)
+               elseif (nNumRefDims < nNumNZStackDims)
                   % - Wrap up trailing dimensions, matlab style, using linear indexing
-                  vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
-                  vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
+                  vnReferencedTensorSize(nNumRefDims) = prod(vnReferencedTensorSize(nNumRefDims:end));
+                  vnReferencedTensorSize = vnReferencedTensorSize(1:nNumRefDims);
                   
-                  % - Convert to linear indexing
-                  bLinearIndexing = true;
-                  [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
-                  S.subs = S.subs(1);
-                  [S.subs{1:nNumTotalDims}] = ind2sub(size(oStack), S.subs{1});
-                  
-                  % - Inverse permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-                  S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  % - Catch "read whole stack" case
+                  if (all(cellfun(@iscolon, S.subs)))
+                     [S.subs{nNumRefDims+1:nNumTotalStackDims}] = deal(':');
+                     vnRetDataSize = vnReferencedTensorSize;
+
+                  else
+                     % - Convert to linear indexing
+                     bLinearIndexing = true;
+                     [S.subs{1}, vnRetDataSize] = GetLinearIndicesForRefs(S.subs, vnReferencedTensorSize, oStack.fhRepSum);
+                     S.subs = S.subs(1);
+                     [S.subs{1:nNumTotalStackDims}] = ind2sub(vnFullTensorSize, S.subs{1});
+
+                     % - Inverse permute index order
+                     vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
+                     S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  end
                                     
-               elseif (nNumDims == nNumTotalDims)
+               elseif (nNumRefDims == nNumNZStackDims)
                   % - Check for colon references
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);                  
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumNZStackDims)) = 1:nNumNZStackDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+                  S.subs(nNumNZStackDims+1:nNumTotalStackDims) = {1};
                   
-               else % (nNumDims > nNumTotalDims)
+               else % (nNumRefDims > nNumNZStackDims)
                   % - Check for non-colon references
                   vbIsColon = cellfun(@iscolon, S.subs);
                   
@@ -378,7 +513,7 @@ classdef TIFFStack < handle
                   vbIsEmpty = cellfun(@isempty, S.subs);
                   
                   % - Check only trailing dimensions
-                  vbTrailing = [false(1, nNumTotalDims) true(1, nNumDims-nNumTotalDims)];
+                  vbTrailing = [false(1, nNumNZStackDims) true(1, nNumRefDims-nNumNZStackDims)];
                   
                   % - Check trailing dimensions for inappropriate indices
                   if (any(vbTrailing & (~vbIsColon & ~vbIsUnitary & ~vbIsEmpty)))
@@ -390,17 +525,19 @@ classdef TIFFStack < handle
                   % - Catch empty refs
                   if (~any(vbIsEmpty))
                      % - Only keep relevant dimensions
-                     S.subs = S.subs(1:nNumTotalDims);
+                     S.subs = S.subs(1:nNumNZStackDims);
                   end
                   
-                  vnReferencedTensorSize(nNumTotalDims+1:nNumDims) = 1;
+                  % - Determine returned data size
+                  vnReferencedTensorSize(nNumNZStackDims+1:nNumRefDims) = 1;
                   vnReferencedTensorSize(vnReferencedTensorSize == 0) = 1;
                   vbIsColon = cellfun(@iscolon, S.subs);
                   vnRetDataSize = cellfun(@numel, S.subs);
                   vnRetDataSize(vbIsColon) = vnReferencedTensorSize(vbIsColon);
                   
                   % - Permute index order
-                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+                  S.subs(nNumNZStackDims+1:nNumTotalStackDims) = {1};
+                  vnInvOrder(oStack.vnDimensionOrder(1:nNumTotalStackDims)) = 1:nNumTotalStackDims;
                   S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
                end
                
@@ -410,6 +547,33 @@ classdef TIFFStack < handle
                   return;
                end
                
+               % - Re-interleave frame indices for deinterleaved stacks
+               if (numel(oStack.vnApparentSize) > 4)
+                  % - Record output data size in deinterleaved space
+                  if (~bLinearIndexing)
+                     vnOutputSize = cellfun(@numel, S.subs);
+                     vbIsColon = cellfun(@iscolon, S.subs);
+                     vnOutputSize(vbIsColon) = oStack.vnApparentSize(vbIsColon);
+                  end
+                  
+                  % - Get frame 
+                  cFrameSubs = S.subs(3:end-1);
+                  if all(cellfun(@iscolon, cFrameSubs))
+                     S.subs = {S.subs{1} S.subs{2}  ':' S.subs{end}};
+                  else
+                     if (bLinearIndexing)
+                        vnFrameIndices = sub2ind(oStack.vnApparentSize(3:end-1), cFrameSubs{:});
+                     else
+                        tnFrameIndices = reshape(1:oStack.vnDataSize(3), ...
+                           oStack.vnApparentSize(3:end-1));
+                        vnFrameIndices = tnFrameIndices(cFrameSubs{:});
+                     end
+                     
+                     % - Construct referencing subscripts for raw stack
+                     S.subs = [S.subs(1:2) {vnFrameIndices(:)} S.subs(end)];
+                  end
+               end
+
                % - Access stack (tifflib or tiffread)
                if (oStack.bUseTiffLib)
                   tfData = TS_read_data_Tiff(oStack, S.subs, bLinearIndexing);
@@ -419,23 +583,43 @@ classdef TIFFStack < handle
                
                % - Permute dimensions, if linear indexing has not been used
                if (~bLinearIndexing)
+                  % - Reshape resulting data in case of deinterleaved stacks
+                  if (numel(oStack.vnApparentSize) > 4)
+                     tfData = reshape(tfData, vnOutputSize);
+                  end
+
                   tfData = permute(tfData, oStack.vnDimensionOrder);
                end
                
-               % - Reshape return data to concatenate trailing dimensions (just as
-               % matlab does)
+               % - Reshape returned data to concatenate trailing dimensions (just as matlab does)
                if (~isequal(size(tfData), vnRetDataSize))
                   tfData = reshape(tfData, vnRetDataSize);
                end
-               
-            case '.'
-               tfData = builtin('subsref', oStack, S);
                
             otherwise
                error('TIFFStack:InvalidReferencing', ...
                      '*** TIFFStack: Only ''()'' referencing is supported by TIFFStacks.');
          end
       end
+      
+%% --- Getter methods
+
+      function strFilename = getFilename(oStack)
+         strFilename = oStack.strFilename;
+      end
+
+      function sImageInfo = getImageInfo(oStack)
+         sImageInfo = oStack.sImageInfo;
+      end
+      
+      function bInvert = getInvert(oStack)
+         bInvert = oStack.bInvert;
+      end
+      
+      function strDataClass = getDataClass(oStack)
+         strDataClass = oStack.strDataClass;
+      end
+      
       
 %% --- Overloaded numel, size, permute, ipermute, ctranspose, transpose
       function [n] = numel(oStack)
@@ -444,22 +628,25 @@ classdef TIFFStack < handle
 
       function [varargout] = size(oStack, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
-         vnDataSize = oStack.vnDataSize; %#ok<PROP>
-         vnDataSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
+         vnApparentSize = oStack.vnApparentSize; %#ok<PROP>
+         vnApparentSize(end+1:numel(oStack.vnDimensionOrder)) = 1; %#ok<PROP>
          
          % - Return the size of the tensor data element, permuted
-         vnSize = vnDataSize(oStack.vnDimensionOrder); %#ok<PROP>
+         vnSize = vnApparentSize(oStack.vnDimensionOrder); %#ok<PROP>
          
-         % - Find last non-unitary dimension and trim
-         nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
-         if (nLastNonUnitary < numel(vnSize))
-            vnSize = vnSize(1:nLastNonUnitary);
+         % - Trim trailing unitary dimensions
+         vbIsUnitary = vnSize == 1;
+         if (vbIsUnitary(end))
+            nLastNonUnitary = find(vnSize == 1, 1, 'last') - 1;
+            if (nLastNonUnitary < numel(vnSize))
+               vnSize = vnSize(1:nLastNonUnitary);
+            end
          end
          
          % - Return specific dimension(s)
          if (exist('vnDimensions', 'var'))
             if (~isnumeric(vnDimensions) || any(vnDimensions < 1))
-               error('TIFFStack:dimensionMustBePositiveInteger', ...
+               error('TIFFStack:DimensionMustBePositiveInteger', ...
                   '*** TIFFStack: Dimensions argument must be a positive integer.');
             end
             
@@ -533,7 +720,7 @@ classdef TIFFStack < handle
       function set.bInvert(oStack, bInvert)
          % - Check contents
          if (~islogical(bInvert) || ~isscalar(bInvert))
-            error('TIFFStack:invalidArgument', ...
+            error('TIFFStack:InvalidArgument', ...
                   '*** TIFFStack/set.bInvert: ''bInvert'' must be a logical scalar.');
          else
             % - Assign bInvert value
@@ -556,24 +743,27 @@ end
 % or so on.
 
 function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
+   % - Fix up final index dimensions, if necessary
+   cIndices(end+1:4) = {1};
+   
    % - Convert colon indexing
    vbIsColon = cellfun(@iscolon, cIndices);
    
    for (nColonDim = find(vbIsColon))
       cIndices{nColonDim} = 1:oStack.vnDataSize(nColonDim);
    end
-      
+
    % - Fix up subsample detection for unitary dimensions
    vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
    vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
    
    % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c)), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices(~vbIsColon));
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
       error('TIFFStack:badsubscript', ...
-            '*** TIFFStack: Index exceeds stack dimensions.');
+         '*** TIFFStack: Index exceeds stack dimensions.');
    end
    
    % - Find unique frames to read
@@ -617,7 +807,7 @@ function [tfData] = TS_read_data_tiffread(oStack, cIndices, bLinearIndexing)
       
    % - Invert data if requested
    if (oStack.bInvert)
-      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
+      tfData = oStack.fhCastFun(oStack.sImageInfo(1).MaxSampleValue) - (tfData - oStack.fhCastFun(oStack.sImageInfo(1).MinSampleValue));
    end
 end
 
@@ -640,14 +830,14 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    end
 
    % - Fix up subsample detection for unitary dimensions
-   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices);
-   vbIsColon(~vbIsColon) = vbIsOne(~vbIsColon) & (oStack.vnDataSize(~vbIsColon) == 1);
+   vbIsOne = cellfun(@(c)isequal(c, 1), cIndices(~vbIsColon));
+   vbIsColon(~vbIsColon) = vbIsOne & (oStack.vnDataSize(~vbIsColon) == 1);
    
    % - Check ranges
-   vnMinRange = cellfun(@(c)(min(c)), cIndices);
-   vnMaxRange = cellfun(@(c)(max(c)), cIndices);
+   vnMinRange = cellfun(@(c)(min(c(:))), cIndices(~vbIsColon));
+   vnMaxRange = cellfun(@(c)(max(c(:))), cIndices(~vbIsColon));
    
-   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize))
+   if (any(vnMinRange < 1) || any(vnMaxRange > oStack.vnDataSize(~vbIsColon)))
       error('TIFFStack:badsubscript', ...
          '*** TIFFStack: Index exceeds stack dimensions.');
    end
@@ -675,13 +865,14 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       tfData = zeros(vnOutputSize, oStack.strDataClass);
       
       % - Do we need to resample the data block?
-      bResample = any(~vbIsColon([1 2 4]));
+      vbTest = [true true false true];
+      bResample = any(vbTest(~vbIsColon));
 
       try
          % - Loop over images in stack
          for (nImage = 1:numel(cIndices{3}))
             % - Skip to this image in stack
-            tifflib('setDirectory', tlStack, cIndices{3}(nImage)-1);
+            oStack.fhSetDirFun(tlStack, cIndices{3}(nImage));
             
             % - Read data from this image, overwriting frame buffer
             [~, tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, []);
@@ -706,7 +897,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       % -- Linear indexing
       
       % - Allocate return vector
-      tfData = zeros(numel(cIndices{1}), 1, oStack.strDataClass);
+      tfData = zeros(size(cIndices{1}), oStack.strDataClass);
       
       % - Allocate single-frame buffer
       vnBlockSize = oStack.vnDataSize(1:2);
@@ -719,12 +910,12 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
       
       % - Loop over images in stack and extract required frames
       try
-         for (nImage = unique(cIndices{3})')
+         for (nImage = unique(cIndices{3}(:))')
             % - Find corresponding pixels
             vbThesePixels = cIndices{3} == nImage;
             
             % - Skip to this image in stack
-            tifflib('setDirectory', tlStack, nImage-1);
+            oStack.fhSetDirFun(tlStack, nImage);
 
             % - Read the subsampled pixels from the stack
             [tfData(vbThesePixels), tfImage] = oStack.fhReadFun(tfImage, tlStack, spp, w, h, rps, tw, th, vnFrameLinearIndices(vbThesePixels));
@@ -741,7 +932,7 @@ function [tfData] = TS_read_data_Tiff(oStack, cIndices, bLinearIndexing)
    
    % - Invert data if requested
    if (oStack.bInvert)
-      tfData = oStack.sImageInfo(1).MaxSampleValue - (tfData - oStack.sImageInfo(1).MinSampleValue);
+      tfData = oStack.sImageInfo(1).MaxSampleValue(1) - (tfData - oStack.sImageInfo(1).MinSampleValue(1));
    end
 end
 
@@ -772,12 +963,16 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
    nLastNonOne = find(~vbOnes, 1, 'last');
    vbTrailingRefs((nLastNonOne+1):end) = false;
 
+   % - Check reference limits
+   if (any(cellfun(@(r,l)any(r>l), cRefs(~vbIsColon), num2cell(vnLims(~vbIsColon)))))
+      error('TIFFStack:badsubscript', 'Index exceeds matrix dimensions.');
+   end
+   
    % - Work out how many linear indices there will be in total
    nNumIndices = prod(vnDimRefSizes);
    vnLinearIndices = zeros(nNumIndices, 1);
    
-   % - Build a referencing window encompassing the leading colon refs (or
-   % first ref)
+   % - Build a referencing window encompassing the leading colon refs (or first ref)
    if (nFirstNonColon > 1)
       vnLinearIndices(1:prod(vnLims(1:(nFirstNonColon-1)))) = 1:prod(vnLims(1:(nFirstNonColon-1)));
    else
@@ -912,6 +1107,11 @@ function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky(tfImageBuff
    end
 end
 
+% TS_set_direcotry - FUNCTION Set the current TIFF directory
+function TS_set_directory(tlStack, nDirectory) %#ok<DEFNU>
+   tifflib('setDirectory', tlStack, nDirectory-1);
+end
+
 %% Pre-2014 matlab Tifflib reading functions
 
 % TS_read_Tiff_striped_separate - FUNCTION Read an image using tifflib, for
@@ -991,6 +1191,12 @@ function [vfOutputPixels, tfImageBuffer] = TS_read_Tiff_tiled_chunky_pre2014(tfI
       vfOutputPixels = tfImageBuffer;
    end
 end
+
+% TS_set_direcotry - FUNCTION Set the current TIFF directory
+function TS_set_directory_pre2014(tlStack, nDirectory) %#ok<DEFNU>
+   tifflib('setDirectory', tlStack, nDirectory);
+end
+
 
 %% Accelerated TiffgetTag function
 
