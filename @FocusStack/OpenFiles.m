@@ -27,7 +27,17 @@ function OpenFiles(oStack)
                OpenFocusStack(oStack, strFullPath, strFilenameOnly, nFile);
 
             case {'.tif', '.tiff'}
-               OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile);
+                
+                % Check tif file header for file format
+                % (Scanimage/Prarie etc)
+                info=imfinfo(oStack.cstrFilenames{nFile});
+                headerString = info(1).ImageDescription;
+                if strncmp('state',headerString,5) % If Scanimage 3.X format... this should be later updated to accomodate later versions and Prarie etc.
+                    OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile);
+                else
+                    OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile);
+                end
+                
             case {'.bin'}
                OpenBinStack(oStack, strFullPath, strFilenameOnly, nFile);
          end
