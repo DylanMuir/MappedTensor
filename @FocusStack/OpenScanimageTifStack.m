@@ -8,15 +8,15 @@ function OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile)
 
 
    % Open Scanimage file header first 
-   sHeader=ConvertScanimageHeader(strFullPath);  % Read header information first for dimension information (interleaved frames)
+   sHeader = ConvertScanimageHeader(strFullPath);  % Read header information first for dimension information (interleaved frames)
    
    % Open Scanimage file 
-   oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath, [], [sHeader.uNumChannels sHeader.nNumFrames]);
+   oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath, [], [sHeader.uNumChannels]);
+   sHeader.nNumFrames = size(oStack.vhMemMapFileHandles{nFile}, 4);
    
-   % - Transpose the stack to match old usage
-   oStack.vhMemMapFileHandles{nFile} = transpose(oStack.vhMemMapFileHandles{nFile});
-
-    
+   % - Permute TIFFStack so that dimensions are in the appropriate order
+   oStack.vhMemMapFileHandles{nFile} = permute(oStack.vhMemMapFileHandles{nFile}, [2 1 4 3]);
+   
    if (nFile == 1)
       oStack.vsHeaders = sHeader;
    else
@@ -79,9 +79,9 @@ function OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile)
 
    % - Check data class
    if (isempty(oStack.strDataClass))
-      oStack.strDataClass = oStack.vhMemMapFileHandles{nFile}.strDataClass;
+      oStack.strDataClass = getDataClass(oStack.vhMemMapFileHandles{nFile});
       
-   elseif (~isequal(oStack.strDataClass, oStack.vhMemMapFileHandles{nFile}.strDataClass))
+   elseif (~isequal(oStack.strDataClass, getDataClass(oStack.vhMemMapFileHandles{nFile})))
       error('FocusStack:DifferentDataClass', ...
             '*** FocusStack/OpenFiles/OpenTifStack: Raw file [%s] has a different data class than the stack.', ...
             ['.../' strFilenameOnly]);

@@ -596,9 +596,6 @@ classdef TIFFStack < handle
                   tfData = reshape(tfData, vnRetDataSize);
                end
                
-            case '.'
-               tfData = oStack.(S(1).subs) ;
-                  
             otherwise
                error('TIFFStack:InvalidReferencing', ...
                      '*** TIFFStack: Only ''()'' referencing is supported by TIFFStacks.');
