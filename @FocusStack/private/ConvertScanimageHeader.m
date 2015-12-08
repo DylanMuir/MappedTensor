@@ -1,4 +1,4 @@
-function sHeader=ConvertScanimageHeader(fileName)
+function sHeader = ConvertScanimageHeader(fileName)
 % Dummy header conversion for FocusStack. Uses Scanimage internal functions
 % to parse tif header information. Includes assignments2StructOrObj() and
 % parseHeader() from Scanimage 3.81 distribution for ensured compatibility.
@@ -34,23 +34,23 @@ if strncmp('state',headerString,5)
     header = parseHeader(headerString);
 else
     fileVersion = 4;
-    header = most.util.assignments2StructOrObj(headerString);            
+    header = assignments2StructOrObj(headerString);            
 end
 
 %Extracts header info required by scim_openTif()
-hdr = extractHeaderData(header,fileVersion);
+hdr = extractHeaderData(header, fileVersion);
 
 %% Convert header information into FocusStack format
 
 sHeader.vnFrameSizePixels = [hdr.numPixels hdr.numLines];
-sHeader.tLineScanTime_ms = 1/ header.acq.frameRate / sHeader.vnFrameSizePixels(2) / 1e-3;
+sHeader.tLineScanTime_ms = 1/ hdr.acq.frameRate / sHeader.vnFrameSizePixels(2) / 1e-3;
 %sHeader.vfXYZStep_nm(3) = 0;
 sHeader.vfXYZStep_nm = [0 0 0];
 %sHeader.fZoomFactor = 1./((oStack.fPixelsPerUM ./ sHeader.vnFrameSizePixels(1)) ./ 117);
 sHeader.fZoomFactor = [];
-sHeader.nNumFrames = hdr.numSlices * hdr.numFrames; 
+sHeader.nNumFrames = hdr.numFrames; 
 
-sHeader.uNumChannels = length(hdr.savedChans);
+sHeader.uNumChannels = hdr.numSlices * length(hdr.savedChans);
 
 sHeader.nStimulusID = nan;
 sHeader.tBlankTime = nan;
@@ -131,7 +131,7 @@ sHeader = orderfields(sHeader);
 end
 
 
-    function s = extractHeaderData(header,fileVersion)
+    function s = extractHeaderData(header, fileVersion)
        % Constants/Inits
         maxNumChans = 4;
         
@@ -186,6 +186,7 @@ end
             s.savedChans = localHdr.channelsSave;
             s.numPixels = localHdr.scanPixelsPerLine;
             s.numLines = localHdr.scanLinesPerFrame;
+            s.acq.frameRate = localHdr.scanFrameRate;
             
             if isfield(localHdr,'acqNumAveragedFramesSaved')
                 saveAverageFactor = localHdr.acqNumAveragedFramesSaved;
@@ -211,7 +212,7 @@ end
     end
 
     
-function header=parseHeader(input)
+function header = parseHeader(input)
 % PARSEHEADER   - Read ScanImage Header String and return structure.
 %   PARSEHEADER will output the value of the header fields as a structure.
 %   Input is the header from ScanImage TIF File (char array).

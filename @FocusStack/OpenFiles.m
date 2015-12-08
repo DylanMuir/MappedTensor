@@ -8,7 +8,7 @@ function OpenFiles(oStack)
       for (nFile = 1:nNumFiles)
          % - Extract a full file path
          strFullPath = get_full_file_path(oStack.cstrFilenames{nFile});
-         [nul, strFilenameOnly, strExt] = fileparts(strFullPath);
+         [~, strFilenameOnly, strExt] = fileparts(strFullPath);
          strFilenameOnly = [strFilenameOnly strExt]; %#ok<AGROW>
 
          % - Check if file exists
@@ -27,12 +27,13 @@ function OpenFiles(oStack)
                OpenFocusStack(oStack, strFullPath, strFilenameOnly, nFile);
 
             case {'.tif', '.tiff'}
-                
                 % Check tif file header for file format
                 % (Scanimage/Prarie etc)
                 info=imfinfo(oStack.cstrFilenames{nFile});
                 headerString = info(1).ImageDescription;
-                if strncmp('state',headerString,5) % If Scanimage 3.X format... this should be later updated to accomodate later versions and Prarie etc.
+                if strncmp('state', headerString, 5) % If Scanimage 3.X format... this should be later updated to accomodate later versions and Prarie etc.
+                    OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile);
+                elseif strfind(headerString, 'scanimage.SI4')
                     OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile);
                 else
                     OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile);
@@ -156,15 +157,17 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
    
    % - Try to convert a Helioscan header, if it exists
    try
-      sHeader = ConvertHelioscanHeader(oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).ImageDescription);
+      sImageInfo = getImageInfo(oStack.vhMemMapFileHandles{nFile});
+      sHeader = ConvertHelioscanHeader(sImageInfo(1).ImageDescription);
       
-   catch mErr
+   catch
       % - Try to extract basic stack information
-      sHeader.vnFrameSizePixels = [oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Width oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Height];
+      vnThisStackSize = size(oStack.vhMemMapFileHandles{nFile});
+      sHeader.vnFrameSizePixels = vnThisStackSize(1:2);
       sHeader.tLineScanTime_ms = oStack.tFrameDuration / sHeader.vnFrameSizePixels(2) / 1e-3;
       sHeader.vfXYZStep_nm(3) = 0;
       sHeader.fZoomFactor = 1./((oStack.fPixelsPerUM ./ sHeader.vnFrameSizePixels(1)) ./ 117);
-      sHeader.nNumFrames = size(oStack.vhMemMapFileHandles{nFile}, 3);
+      sHeader.nNumFrames = vnThisStackSize(3);
       sHeader.nStimulusID = nan;
       sHeader.tBlankTime = nan;
 
@@ -234,9 +237,9 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
 
    % - Check data class
    if (isempty(oStack.strDataClass))
-      oStack.strDataClass = oStack.vhMemMapFileHandles{nFile}.strDataClass;
+      oStack.strDataClass = getDataClass(oStack.vhMemMapFileHandles{nFile});
       
-   elseif (~isequal(oStack.strDataClass, oStack.vhMemMapFileHandles{nFile}.strDataClass))
+   elseif (~isequal(oStack.strDataClass, getDataClass(oStack.vhMemMapFileHandles{nFile})))
       error('FocusStack:DifferentDataClass', ...
             '*** FocusStack/OpenFiles/OpenTifStack: Raw file [%s] has a different data class than the stack.', ...
             ['.../' strFilenameOnly]);
@@ -248,7 +251,7 @@ end
 
 function OpenBinStack(oStack, strFullPath, strFilenameOnly, nFile)
    % - find header name
-   [strDir, strName, strExt] = fileparts(strFullPath);
+   [strDir, strName, ~] = fileparts(strFullPath);
    strHeaderName = strName(strfind(strName,'2') : strfind(strName,'h'));
    
    % - Try to convert a Helioscan header, if it exists
