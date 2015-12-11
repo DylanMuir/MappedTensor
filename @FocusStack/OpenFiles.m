@@ -121,7 +121,7 @@ function OpenFocusStack(oStack, strFullFilePath, strFilenameOnly, nFile) %#ok<IN
 
    % - Check zoom
    if (isempty(oStack.fPixelsPerUM))
-      oStack.fPixelsPerUM = 2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor);
+      oStack.fPixelsPerUM = sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor);
 
    elseif (~isequal(oStack.fPixelsPerUM, 2*sHeader.vnFrameSizePixels(1) / (117 / sHeader.fZoomFactor)))
       warning('FocusStack:DifferentZoom', ...
