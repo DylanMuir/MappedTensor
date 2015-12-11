@@ -43,14 +43,17 @@ hdr = extractHeaderData(header, fileVersion);
 %% Convert header information into FocusStack format
 
 sHeader.vnFrameSizePixels = [hdr.numPixels hdr.numLines];
-sHeader.tLineScanTime_ms = 1/ hdr.acq.frameRate / sHeader.vnFrameSizePixels(2) / 1e-3;
+sHeader.tLineScanTime_ms = 1/ header.acq.frameRate / sHeader.vnFrameSizePixels(2) / 1e-3;
 %sHeader.vfXYZStep_nm(3) = 0;
-sHeader.vfXYZStep_nm = [0 0 0];
+sHeader.vfXYZStep_nm = [0 0 header.acq.zStepSize*1000];
 %sHeader.fZoomFactor = 1./((oStack.fPixelsPerUM ./ sHeader.vnFrameSizePixels(1)) ./ 117);
-sHeader.fZoomFactor = [];
-sHeader.nNumFrames = hdr.numFrames; 
+sHeader.fZoomFactor = header.acq.zoomFactor;
+%sHeader.nNumFrames = hdr.numFrames; 
+sHeader.nNumFrames = header.acq.numberOfZSlices * hdr.numFrames; 
 
-sHeader.uNumChannels = hdr.numSlices * length(hdr.savedChans);
+
+%sHeader.uNumChannels = hdr.numSlices * length(hdr.savedChans);
+sHeader.uNumChannels = length(hdr.savedChans);
 
 sHeader.nStimulusID = nan;
 sHeader.tBlankTime = nan;
