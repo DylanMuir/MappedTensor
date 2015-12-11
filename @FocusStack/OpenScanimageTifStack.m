@@ -11,8 +11,8 @@ function OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile)
    sHeader = ConvertScanimageHeader(strFullPath);  % Read header information first for dimension information (interleaved frames)
    
    % Open Scanimage file 
-   oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath, [], [sHeader.uNumChannels]);
-   sHeader.nNumFrames = size(oStack.vhMemMapFileHandles{nFile}, 4);
+   oStack.vhMemMapFileHandles{nFile} = TIFFStack(strFullPath, [], [sHeader.uNumChannels sHeader.nNumFrames]);
+   %sHeader.nNumFrames = size(oStack.vhMemMapFileHandles{nFile}, 4);
    
    % - Permute TIFFStack so that dimensions are in the appropriate order
    oStack.vhMemMapFileHandles{nFile} = permute(oStack.vhMemMapFileHandles{nFile}, [2 1 4 3]);
@@ -58,13 +58,13 @@ function OpenScanimageTifStack(oStack, strFullPath, strFilenameOnly, nFile)
 
    % - Check zoom
    if (isempty(oStack.fPixelsPerUM))
-      oStack.fPixelsPerUM = sHeader.vnFrameSizePixels(1) ./ (117 ./ sHeader.fZoomFactor);
+      oStack.fPixelsPerUM = sHeader.vnFrameSizePixels(1) ./ (389 ./ sHeader.fZoomFactor);
 
-   elseif (~isequal(oStack.fPixelsPerUM, sHeader.vnFrameSizePixels(1) ./ (117 ./ sHeader.fZoomFactor)))
+   elseif (~isequal(oStack.fPixelsPerUM, sHeader.vnFrameSizePixels(1) ./ (389 ./ sHeader.fZoomFactor)))
       warning('FocusStack:DifferentZoom', ...
          '--- FocusStack/OpenFiles/OpenTifStack: Raw file [%s] has a different zoom level than the stack (%dum vs %dum).', ...
          ['.../' strFilenameOnly], round(oStack.vnFrameSize(1) ./ oStack.fPixelsPerUM), ...
-         round(oStack.vnFrameSize(1) ./ (sHeader.vnFrameSizePixels(1) ./ (117 ./ sHeader.fZoomFactor))));
+         round(oStack.vnFrameSize(1) ./ (sHeader.vnFrameSizePixels(1) ./ (389 ./ sHeader.fZoomFactor))));
    end
    
    % - Check number of channels
