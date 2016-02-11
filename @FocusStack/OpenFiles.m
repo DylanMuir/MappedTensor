@@ -150,7 +150,8 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
       
    catch mErr
       % - Try to extract basic stack information
-      sHeader.vnFrameSizePixels = [oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Width oStack.vhMemMapFileHandles{nFile}.sImageInfo(1).Height];
+      sImageInfo = getImageInfo(oStack.vhMemMapFileHandles{nFile});
+      sHeader.vnFrameSizePixels = [sImageInfo(1).Width sImageInfo(1).Height];
       sHeader.tLineScanTime_ms = oStack.tFrameDuration / sHeader.vnFrameSizePixels(2) / 1e-3;
       sHeader.vfXYZStep_nm(3) = 0;
       sHeader.fZoomFactor = 1./((oStack.fPixelsPerUM ./ sHeader.vnFrameSizePixels(1)) ./ 117);
@@ -224,9 +225,9 @@ function OpenTifStack(oStack, strFullPath, strFilenameOnly, nFile)
 
    % - Check data class
    if (isempty(oStack.strDataClass))
-      oStack.strDataClass = oStack.vhMemMapFileHandles{nFile}.strDataClass;
+      oStack.strDataClass = getDataClass(oStack.vhMemMapFileHandles{nFile});
       
-   elseif (~isequal(oStack.strDataClass, oStack.vhMemMapFileHandles{nFile}.strDataClass))
+   elseif (~isequal(oStack.strDataClass, getDataClass(oStack.vhMemMapFileHandles{nFile})))
       error('FocusStack:DifferentDataClass', ...
             '*** FocusStack/OpenFiles/OpenTifStack: Raw file [%s] has a different data class than the stack.', ...
             ['.../' strFilenameOnly]);
