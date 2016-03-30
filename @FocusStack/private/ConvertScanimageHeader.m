@@ -17,11 +17,11 @@ hTif = Tiff(fileName);
 
 headerString  = hTif.getTag('ImageDescription');
 
-numImages = 1;
-while ~hTif.lastDirectory()
-    numImages = numImages + 1;
-    hTif.nextDirectory();
-end
+% numImages = 1;
+% while ~hTif.lastDirectory()
+%     numImages = numImages + 1;
+%     hTif.nextDirectory();
+% end
 hTif.setDirectory(1);
 
 if strncmp('state',headerString,5) 
@@ -45,17 +45,21 @@ sHeader.nNumFrames = header.acq.numberOfZSlices * hdr.numFrames;
 
 sHeader.uNumChannels = hdr.numSlices * length(hdr.savedChans);
 
-sHeader.nStimulusID = nan;
-sHeader.tBlankTime = nan;
-
-% - Sequence is unknown
-sHeader.vnSequenceIDs = [];
+% - Visual stimulus information
+if isfield(header, 'behavior') % if stimulus-related header information exists,
+    sHeader.nStimulusID = header.behavior.nStimulusID;
+    sHeader.tBlankTime = header.behavior.tBlankTime;
+    %sHeader.vnSequenceIDs = str2num(header.behavior.StimSeqIDList) ; % gives error when empty
+    eval(['sHeader.vnSequenceIDs = ' header.behavior.StimSeqIDList ' ; ' ]);
+    sHeader.nSequenceLength = numel(sHeader.vnSequenceIDs);
+else
+    sHeader.vnSequenceIDs = [];
+    sHeader.nSequenceLength = [];
+    sHeader.nStimulusID = [];
+    sHeader.tBlankTime = [];
+end
 
 % Copied from ConvertHelioscanHeader()
-sHeader.vnSequenceIDs = nan;
-sHeader.nSequenceLength = nan;
-sHeader.nStimulusID = nan;
-   
 sHeader.fVersion = [];
 sHeader.strFilename = [];
 sHeader.tStartTime_ms = [];
@@ -112,7 +116,7 @@ sHeader.bFiberScope = [];
 sHeader.fPixelClockLSHz = [];
 sHeader.fLSScansToRead = [];
 sHeader.bLSXY = [];
-sHeader.tBlankTime = [];
+%sHeader.tBlankTime = [];
 sHeader.nDataOffset = [];
 sHeader.nDataLength = [];
 sHeader.nScanLineLength = [];
@@ -241,6 +245,7 @@ while length(out)>2
     eval(['header.' out{1} '=out{2};']);
     out=out(3:end);
 end
+eval(['header.' out{1} '=out{2};']); % Added to catch last line.
 end
 
 
