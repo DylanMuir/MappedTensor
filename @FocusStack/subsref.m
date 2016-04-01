@@ -37,6 +37,15 @@ if (isequal(sSubs(1).type, '.'))
          
          varargout{1} = ExtractAlignedFrames(oStack, sSubs(2));
       
+      case {'AlignedStackDouble'}
+         if (numel(sSubs) == 1)
+            sSubs(2).type = '()';
+            sSubs(2).subs = {':', ':', ':', ':'};
+         end
+         
+         varargout{1} = ExtractAlignedFramesDouble(oStack, sSubs(2));
+         
+         
       case {'SummedFrames'}
          if (numel(sSubs) == 1)
             sSubs(2).type = '()';

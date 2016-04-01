@@ -30,7 +30,7 @@ end
 
 % -- Read from each file in turn
 
-if (oStack.bSubtractBlack || oStack.bConvertToDFF || oStack.bSubtractBlank)
+if (oStack.bSubtractBlack || oStack.bConvertToDFF || oStack.bSubtractBlank || oStack.bDoubleOutput)
    strOutputDataClass = 'double';
 else
    strOutputDataClass = oStack.strDataClass;

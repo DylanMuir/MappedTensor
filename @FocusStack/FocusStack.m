@@ -9,6 +9,9 @@
 %    fsStack.AlignedStack(:, :, :, :)
 %    fsStack.RawStack(:, :, :, :);
 %
+% To extract aligned frames in double format (including NaN for unavailable pixels:
+%    fsStack.AlignedStackDouble(:, :, :, :)
+%
 % To accumulate over the stack:
 %    fsStack.SummedFrames(:, :, :, :);
 %    fsStack.SummedAlignedFrames(:, :, :, :);
@@ -35,6 +38,7 @@ classdef FocusStack < handle
       cstrFilenames = {};
       bConvertToDFF = false;
       bSubtractBlank = false;
+      bDoubleOutput = false;
    end
    
    properties (SetAccess = private, GetAccess = private)
