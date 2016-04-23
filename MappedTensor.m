@@ -76,7 +76,7 @@
 % Dot referencing ('.') is not supported.
 %
 % sum(mtVar <, nDimension>) is supported, to avoid importing the entire tensor
-% into memory.
+% into memory. Trailing strings ('native, 'double', etc.) are also supported.
 %
 % Convenience functions:
 %    SliceFunction: Execute a function on the entire tensor, by slicing it along
@@ -248,16 +248,29 @@ classdef MappedTensor < handle
          if (isscalar(vnTensorSize))
             vnTensorSize = vnTensorSize * [1 1];
          end
-                     
+         
+         % - Get a handle to the appropriate shim function
+         [mtVar.hShimFunc, ...
+             mtVar.hRepSumFunc, ...
+             mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
+         
+         % - Make sure dimensions are acceptable - note: can't cope with 0 dims
+         validateattributes(vnTensorSize, {'numeric'}, {'integer', 'real', 'positive'});
+         
+         % - Cast to double to avoid overflow and for mex compatiblity
+         vnTensorSize = double(vnTensorSize);
+         
+         % - Ignore trailing singleton dimensions
+         while (vnTensorSize(end) == 1 && (numel(vnTensorSize) > 2))
+             vnTensorSize(end) = [];
+         end
+         
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
          
-         % - Get a handle to the appropriate shim function
-         [mtVar.hShimFunc, ...
-          mtVar.hRepSumFunc, ...
-          mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
+
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
@@ -496,7 +509,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% Overloaded methods (size, numel, permute, ipermute, ctranspose, transpose, isreal)
+      %% Overloaded methods (size, numel, ndims, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
@@ -551,6 +564,18 @@ classdef MappedTensor < handle
          
          % - Return the total number of elements in the tensor
          nNumElem = mtVar.nNumElements;
+      end
+      
+      % ndims - METHOD Overloaded ndims function
+      function [nDim] = ndims(mtVar, varargin)
+          % - If varargin contains anything, a cell reference "{}" was attempted
+          if (~isempty(varargin))
+              error('MappedTensor:cellRefFromNonCell', ...
+                  '*** MappedTensor: Cell contents reference from non-cell obejct.');
+          end
+          
+          % - Return the total number of dimensions in the tensor
+          nDim = length(size(mtVar));
       end
       
       % permute - METHOD Overloaded permute function
@@ -805,40 +830,28 @@ classdef MappedTensor < handle
             '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
       end      
    
-      %% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim>)"
+      %% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim, outtype>)"
       function [tFinalSum] = sum(mtVar, varargin)
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
-         if (exist('varargin', 'var') && ~isempty(varargin))
-            % - Check varargin for string parameters and discard
-            vbIsString = cellfun(@ischar, varargin);
-            varargin = varargin(~vbIsString);
-            
-            % - Too many arguments?
-            if (numel(varargin) > 1)
-               error('MappedTensor:sum:InvalidArguments', ...
-                  '*** MappedTensor/sum: Too many arguments were supplied.');
-            end
-            
-            % - Was a dimension specified?
-            if (~isnumeric(varargin{1}) || numel(varargin{1}) > 1)
-               error('MappedTensor:sum:InvalidArguments', ...
-                  '*** MappedTensor/sum: ''dim'' must be supplied as a scalar number.');
-            end
-            
-            % - Record dimension to sum along
-            nDim = varargin{1};
-            
-         else
-            % - By default, sum along first non-singleton dimension
-            nDim = find(vnTensorSize > 1, 1, 'first');
+         % - Use built-in "sum" on an empty matrix similar to mtVar to handle inputs
+         % and get output class, output size and summation dimension
+         tmp = sum(zeros([vnTensorSize 0],mtVar.strStorageClass),varargin{:});
+         
+         outtype = class(tmp);
+         vnSumSize = size(tmp);
+         vnSumSize = vnSumSize(1:ndims(mtVar));
+         nDim = find(vnTensorSize-vnSumSize);
+         
+         % - Short cut for the case when we return the whole matrix
+         if isempty(nDim)
+             tFinalSum = cast(mtVar,outtype);
+             return;
          end
          
          % -- Sum in chunks to avoid allocating full tensor
          nElementsInChunk = 100000;
-         vnSumSize = vnTensorSize;
-         vnSumSize(nDim) = 1;
          vnSliceDimensions = cumprod(vnTensorSize);
          
          % - Compute the size of a single split
@@ -857,7 +870,7 @@ classdef MappedTensor < handle
          end
          
          % -- Perform sum by taking dimensions in turn
-         tFinalSum = zeros(vnSumSize);
+         tFinalSum = zeros(vnSumSize, outtype);
          
          % - Construct referencing structures
          sSourceRef = substruct('()', ':');
@@ -877,7 +890,7 @@ classdef MappedTensor < handle
             % - Call subsasgn, subsref and sum to process data
             sSourceRef.subs = cellTheseSourceIndices;
             sDestRef.subs = cellTheseDestIndices;
-            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), nDim));
+            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), varargin{:}));
             
             % - Increment first non-max index
             nIncrementDim = find(vnSplitIndices <= vnNumDivisions, 1, 'first');
@@ -1587,7 +1600,7 @@ function isvalidsubscript(oRefs)
          
       else
          % - Test for normal indexing
-         validateattributes(oRefs, {'single', 'double'}, {'integer', 'real', 'positive'});
+         validateattributes(oRefs, {'numeric'}, {'integer', 'real', 'positive'});
       end
       
    catch
@@ -1749,8 +1762,8 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, h
             '*** MappedTensor: Index exceeds matrix dimensions.');
          
       else
-         % - This dimension was ok
-         cCheckedRefs{nRefDim} = cRefs{nRefDim};
+          % - This dimension was ok -- cast to double to avoid overflow and for mex compatibility
+          cCheckedRefs{nRefDim} = double(cRefs{nRefDim});
       end
    end
    
