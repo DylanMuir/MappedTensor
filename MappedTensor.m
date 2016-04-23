@@ -269,9 +269,7 @@ classdef MappedTensor < handle
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
-         
-
-         
+                 
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
             [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
@@ -342,7 +340,7 @@ classdef MappedTensor < handle
             error('MappedTensor:InvalidReferencing', ...
                '*** MappedTensor: ''{}'' and ''.'' referencing methods are not supported by MappedTensor objects.');
          end
-         
+ 
          % - Check reference type
          switch (subs(1).type)
             case {'.', '{}'}
@@ -428,7 +426,7 @@ classdef MappedTensor < handle
                   error('MappedTensor:badsubscript', ...
                      '*** MappedTensor: Subscript out of range.');
                end
-               
+
                % - Permute index order
                vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
@@ -488,11 +486,10 @@ classdef MappedTensor < handle
          % - Permute input data
          tfData = ipermute(tfData, mtVar.vnDimensionOrder);
          
-         if (~isreal(tfData))
+         if (~isreal(tfData)) || (~isreal(mtVar)) 
             % - Assign to both real and complex parts
             mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
             mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-
          else
             % - Assign only real part
             mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
