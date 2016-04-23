@@ -835,9 +835,13 @@ classdef MappedTensor < handle
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
-         % - Use built-in "sum" on an empty matrix similar to mtVar to handle inputs
-         % and get output class, output size and summation dimension
-         tmp = sum(zeros([vnTensorSize 0],mtVar.strStorageClass),varargin{:});
+         % - Use built-in "sum" on an empty matrix similar to mtVar to validate
+         % inputs and get output class, output size and summation dimension
+         if isequal(mtVar.strClass,'logical')
+             tmp = sum(false([vnTensorSize 0]),varargin{:});
+         else
+             tmp = sum(zeros([vnTensorSize 0],mtVar.strClass),varargin{:});
+         end
          
          outtype = class(tmp);
          vnSumSize = size(tmp);
@@ -870,7 +874,11 @@ classdef MappedTensor < handle
          end
          
          % -- Perform sum by taking dimensions in turn
-         tFinalSum = zeros(vnSumSize, outtype);
+         if isequal(outtype,'logical')
+            tFinalSum = false(vnSumSize);
+         else
+            tFinalSum = zeros(vnSumSize, outtype);
+         end
          
          % - Construct referencing structures
          sSourceRef = substruct('()', ':');
