@@ -75,8 +75,8 @@
 %
 % Dot referencing ('.') is not supported.
 %
-% sum(mtVar <, nDimension>) is supported, to avoid importing the entire tensor
-% into memory.
+% sum(mtVar <, nDimension, strOutType>) is supported, to avoid importing
+% the entire tensor into memory.
 %
 % Convenience functions:
 %    SliceFunction: Execute a function on the entire tensor, by slicing it along
@@ -144,6 +144,9 @@
 
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 19th November, 2010
+%
+% Thanks to @marcsous (https://github.com/marcsous) for bug reports and
+% fixes.
 
 classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = private)
@@ -1371,12 +1374,16 @@ function strFilename = create_temp_file(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
    
-   % - Create the file
-   hFile = fopen(strFilename, 'w+');
-   
-   % - Allocate enough space
-   fwrite(hFile, 0, 'uint8', nNumEntries-1);
-   fclose(hFile);
+    % - Fast allocation on some platforms
+    bFailed = true;
+%     [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+
+    % - Slow fallback -- use Matlab to write data directly
+    if (bFailed)
+       hFile = fopen(strFilename, 'w+');
+       fwrite(hFile, 0, 'uint8', nNumEntries-1);
+       fclose(hFile);
+   end
 end
 
 function [nBytes, strStorageClass] = ClassSize(strClass)
