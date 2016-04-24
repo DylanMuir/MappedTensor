@@ -550,6 +550,18 @@ classdef MappedTensor < handle
          end
       end
       
+      % ndims - METHOD Overloaded ndims function
+      function [nDim] = ndims(mtVar, varargin)
+          % - If varargin contains anything, a cell reference "{}" was attempted
+          if (~isempty(varargin))
+              error('MappedTensor:cellRefFromNonCell', ...
+                  '*** MappedTensor: Cell contents reference from non-cell obejct.');
+          end
+          
+          % - Return the total number of dimensions in the tensor
+          nDim = length(size(mtVar));
+      end
+      
       % numel - METHOD Overloaded numel function
       function [nNumElem] = numel(mtVar, varargin)
          % - If varargin contains anything, a cell reference "{}" was attempted
