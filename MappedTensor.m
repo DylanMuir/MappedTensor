@@ -171,7 +171,7 @@ classdef MappedTensor < handle
       hRepSumFunc;            % Handle to the (hopefully compiled) repsum function
       hChunkLengthFunc;       % Handle to the (hopefully compiled) chunk length function
    end
-   
+
    methods
       %% MappedTensor - CONSTRUCTOR
       function [mtVar] = MappedTensor(varargin)
@@ -202,6 +202,12 @@ classdef MappedTensor < handle
                   case {'readonly'}
                      % - Read-only or read/write status was specified
                      mtVar.bReadOnly = logical(varargin{nArg+1});
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
+                   case {'initwithzeros'}
+                     % - Initialize data with zeros or leave uninitialized
+                     mtVar.bInitWithZeros = logical(varargin{nArg+1});
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -236,7 +242,6 @@ classdef MappedTensor < handle
             vnTensorSize = [varargin{2:end}];
             mtVar.strRealFilename = varargin{1};
             mtVar.bTemporary = false;
-            
          else
             % - Create a temporary file
             mtVar.bTemporary = true;
@@ -253,9 +258,9 @@ classdef MappedTensor < handle
          [mtVar.hShimFunc, ...
              mtVar.hRepSumFunc, ...
              mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
-         
+
          % - Make sure dimensions are acceptable - note: can't cope with 0 dims
-         validateattributes(vnTensorSize, {'numeric'}, {'integer', 'real', 'positive'});
+         validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
          
          % - Cast to double to avoid overflow and for mex compatiblity
          vnTensorSize = double(vnTensorSize);
@@ -269,7 +274,7 @@ classdef MappedTensor < handle
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
-                 
+
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
             [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
@@ -363,7 +368,7 @@ classdef MappedTensor < handle
       function [tfData] = my_subsref(mtVar, S)
          % - Test for valid subscripts
          cellfun(@isvalidsubscript, S.subs);
-         
+
          % - Re-order reference indices
          nNumDims = numel(S.subs);
          nNumTotalDims = numel(mtVar.vnDimensionOrder);
@@ -375,7 +380,7 @@ classdef MappedTensor < handle
             if (nNumDims == 1)
                % - Translate from linear refs to indices
                nNumDims = nNumTotalDims;
-               
+
                % - Translate colon indexing
                if (iscolon(S.subs{1}))
                   S.subs{1} = (1:numel(mtVar))';
@@ -383,11 +388,11 @@ classdef MappedTensor < handle
                
                % - Get equivalent subscripted indexes
                [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
-               
+
                % - Permute indices and convert back to linear indexing
                vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-               
+
                try
                   S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
                catch
@@ -941,7 +946,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
+            [~, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -970,7 +975,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
+            [~, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -1332,13 +1337,16 @@ end
 function strFilename = create_temp_file(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
-   
-   % - Create the file
-   hFile = fopen(strFilename, 'w+');
-   
-   % - Allocate enough space
-   fwrite(hFile, 0, 'uint8', nNumEntries-1);
-   fclose(hFile);
+
+    % - Fast allocation on some platforms
+    [status, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+
+    % - Slow fallback -- use Matlab
+    if (status)
+       hFile = fopen(strFilename, 'w+');
+       fwrite(hFile, 0, 'uint8', nNumEntries-1);
+       fclose(hFile);
+   end
 end
 
 function [nBytes, strStorageClass] = ClassSize(strClass)
@@ -1605,12 +1613,12 @@ function isvalidsubscript(oRefs)
          
       else
          % - Test for normal indexing
-         validateattributes(oRefs, {'numeric'}, {'integer', 'real', 'positive'});
+         validateattributes(oRefs, {'numeric'}, {'positive', 'integer'});
       end
-      
+
    catch
       error('MappedTensor:badsubscript', ...
-            '*** MappedTensor: Subscript indices must either be real positive integers or logicals.');
+            '*** MappedTensor: Subscript indices must either be positive integers or logicals.');
    end
 end
 
@@ -1635,7 +1643,7 @@ function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strCl
    
    % - Maximise chunk probability and minimise number of reads by reading
    % only sorted unique entries
-   [vnLinearIndices, nul, vnReverseSort] = unique_accel(vnLinearIndices); %#ok<ASGLU>
+   [vnLinearIndices, ~, vnReverseSort] = unique_accel(vnLinearIndices); %#ok<ASGLU>
    
    % - Split into readable chunks
    mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
@@ -1900,7 +1908,7 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
       case 'open'
          if (nargin == 2)
             [varargout{1}] = fopen(varargin{1}, 'r+');
-            [nul, nul, varargout{2}, nul] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
+            [~, ~, varargout{2}, ~] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
          else
             varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
          end
@@ -1951,7 +1959,7 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
       hShimFunc = @mapped_tensor_shim;
       hRepSumFunc = @mapped_tensor_repsum;
       hChunkLengthFunc = @mapped_tensor_chunklength;
-      
+
    else
       % - Just use the slow matlab version
       warning('MappedTensor:MEXCompilation', ...
