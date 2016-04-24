@@ -1758,8 +1758,8 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, h
             '*** MappedTensor: Index exceeds matrix dimensions.');
          
       else
-         % - This dimension was ok
-         cCheckedRefs{nRefDim} = cRefs{nRefDim};
+         % - This dimension was ok, convert to double
+         cCheckedRefs{nRefDim} = double(cRefs{nRefDim});
       end
    end
    
