@@ -1250,7 +1250,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename, mtVar.strMachineFormat);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
@@ -1729,6 +1729,42 @@ function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices
    end
 end
 
+% mt_read_all - FUNCTION Read the entire stack
+function [tData] = mt_read_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, ~)
+   % - Allocate data
+   [~, strStorageClass] = ClassSize(strClass);
+%    tData = zeros(vnTensorSize, strStorageClass);
+   
+   % - Seek file to beginning of data
+   fseek(hDataFile, nHeaderBytes, 'bof');
+   
+   % - Normal forward read
+   tData = fread(hDataFile, prod(vnTensorSize), [strStorageClass '=>' strClass], 0);
+end
+
+% mt_write_all - FUNCTION Write the entire stack
+function mt_write_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, tData, ~)
+
+   % - Do we need to replicate the data?
+   if (isscalar(tData) && prod(vnTensorSize) > 1)
+      tData = repmat(tData, prod(vnTensorSize), 1);
+
+   elseif (numel(tData) ~= prod(vnTensorSize))
+      % - The was a mismatch in the sizes of the left and right sides
+      error('MappedTensor:index_assign_element_count_mismatch', ...
+            '*** MappedTensor: In an assignment A(I) = B, the number of elements in B and I must be the same.');
+   end
+   
+   % - Get storage class
+   [~, strStorageClass] = ClassSize(strClass);
+
+   % - Seek file to beginning of data
+   fseek(hDataFile,  nHeaderBytes, 'bof');
+      
+   % - Normal forward write of data
+   fwrite(hDataFile, tData, strStorageClass, 0);
+end
+
 % ConvertColonCheckLims - FUNCTION Convert colon referencing to subscript indices; check index limits
 function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, hRepSumFunc)
    % - Handle linear indexing
@@ -1904,6 +1940,12 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
          
       case 'write_chunks'
          mt_write_data_chunks(varargin{1:7});
+         
+      case 'read_all'
+         varargout{1} = mt_read_all(varargin{1:5});
+         
+      case 'write_all'
+         varargout{1} = mt_write_all(varargin{1:6});
    end
 end
 
