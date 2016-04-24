@@ -233,14 +233,14 @@ classdef MappedTensor < handle
          % - Should we map a file on disk, or create a temporary file?
          if (ischar(varargin{1}))
             % - Open an existing file
-            vnTensorSize = [varargin{2:end}];
+            vnTensorSize = double([varargin{2:end}]);
             mtVar.strRealFilename = varargin{1};
             mtVar.bTemporary = false;
             
          else
             % - Create a temporary file
             mtVar.bTemporary = true;
-            vnTensorSize = [varargin{:}];
+            vnTensorSize = double([varargin{:}]);
          end
 
          % - If only one dimension was provided, assume the matrix is
@@ -249,6 +249,15 @@ classdef MappedTensor < handle
             vnTensorSize = vnTensorSize * [1 1];
          end
                      
+         
+         % - Validate tensor size argument
+         try
+            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
+         catch
+            error('MappedTensor:Arguments', ...
+               '*** MappedTensor: Error: ''vnTensorSize'' must be a positive integer vector.');
+         end
+         
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
@@ -1587,7 +1596,7 @@ function isvalidsubscript(oRefs)
          
       else
          % - Test for normal indexing
-         validateattributes(oRefs, {'single', 'double'}, {'integer', 'real', 'positive'});
+         validateattributes(oRefs, {'numeric'}, {'integer', 'real', 'positive'});
       end
       
    catch
