@@ -826,34 +826,69 @@ classdef MappedTensor < handle
             '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
       end      
    
-      %% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim>)"
+      %% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim, outtype>)"
       function [tFinalSum] = sum(mtVar, varargin)
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
-         if (exist('varargin', 'var') && ~isempty(varargin))
-            % - Check varargin for string parameters and discard
-            vbIsString = cellfun(@ischar, varargin);
-            varargin = varargin(~vbIsString);
-            
-            % - Too many arguments?
-            if (numel(varargin) > 1)
-               error('MappedTensor:sum:InvalidArguments', ...
-                  '*** MappedTensor/sum: Too many arguments were supplied.');
+         % - By default, sum along first non-singleton dimension
+         DEF_nDim = find(vnTensorSize > 1, 1, 'first');
+         
+         % - By default, accumulate in a double tensor
+         DEF_strReturnClass = 'double';
+         
+         % - Check arguments and apply defaults
+         if (nargin > 3)
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: Too many arguments were supplied.');
+         
+         elseif (nargin == 3)
+
+         elseif (nargin == 2)
+            if (ischar(varargin{1}))
+               varargin{2} = varargin{1};
+               varargin{1} = DEF_nDim;
+                           
+            else
+               varargin{2} = DEF_strReturnClass;
             end
-            
-            % - Was a dimension specified?
-            if (~isnumeric(varargin{1}) || numel(varargin{1}) > 1)
-               error('MappedTensor:sum:InvalidArguments', ...
-                  '*** MappedTensor/sum: ''dim'' must be supplied as a scalar number.');
+         
+         elseif (nargin == 1)
+            varargin{1} = DEF_nDim;
+            varargin{2} = DEF_strReturnClass;
+         end
+         
+         % - Was a valid dimension specified?
+         try
+            validateattributes(varargin{1}, {'numeric'}, {'positive', 'integer', 'scalar'});
+         catch
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: ''dim'' must be supplied as a positive scalar number.');
+         end
+         nDim = varargin{1};
+         
+         % - Was a valid output argument type specified?
+         try
+            strReturnClass = validatestring(lower(varargin{2}), {'native', 'double', 'default'});
+         catch
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: ''outtype'' must be one of {''double'', ''native'', ''default''}.');
+         end
+
+         % - Get the class for the summation matrix
+         if (strcmp(strReturnClass, 'native'))
+            % - Logicals are always summed in a double tensor
+            if (islogical(mtVar))
+               strOutputClass = 'double';
+            else
+               strOutputClass = mtVar.strClass;
             end
+         
+         elseif (strcmp(strReturnClass, 'default'))
+            strOutputClass = DEF_strReturnClass;
             
-            % - Record dimension to sum along
-            nDim = varargin{1};
-            
-         else
-            % - By default, sum along first non-singleton dimension
-            nDim = find(vnTensorSize > 1, 1, 'first');
+         else %if (strcmp(strReturnClass, 'double'))
+            strOutputClass = strReturnClass;
          end
          
          % -- Sum in chunks to avoid allocating full tensor
@@ -878,7 +913,7 @@ classdef MappedTensor < handle
          end
          
          % -- Perform sum by taking dimensions in turn
-         tFinalSum = zeros(vnSumSize);
+         tFinalSum = zeros(vnSumSize, strOutputClass);
          
          % - Construct referencing structures
          sSourceRef = substruct('()', ':');
@@ -898,7 +933,7 @@ classdef MappedTensor < handle
             % - Call subsasgn, subsref and sum to process data
             sSourceRef.subs = cellTheseSourceIndices;
             sDestRef.subs = cellTheseDestIndices;
-            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), nDim));
+            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), nDim, strReturnClass));
             
             % - Increment first non-max index
             nIncrementDim = find(vnSplitIndices <= vnNumDivisions, 1, 'first');
