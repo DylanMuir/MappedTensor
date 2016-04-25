@@ -1380,9 +1380,14 @@ function strFilename = create_temp_file(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
    
-    % - Fast allocation on some platforms
-    bFailed = true;
-%     [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+    % - Attempt fast allocation on some platforms
+    if (ispc)
+       [bFailed, ~] = system(sprintf('fsutil file createnew %s %i', strFilename, nNumEntries));
+    elseif (ismac || isunix)
+       [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+    else
+       bFailed = true;
+    end
 
     % - Slow fallback -- use Matlab to write zero data directly
     if (bFailed)
