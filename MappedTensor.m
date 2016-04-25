@@ -1382,13 +1382,9 @@ function strFilename = create_temp_file(nNumEntries)
    
     % - Fast allocation on some platforms
     bFailed = true;
-%     if ispc()
-%        [bFailed, ~] = system(sprintf('fsutil file createnew %s %i', file, nbytes));
-%     else
-%        [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
-%     end
+%     [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
 
-    % - Slow fallback -- use Matlab to write data directly
+    % - Slow fallback -- use Matlab to write zero data directly
     if (bFailed)
        hFile = fopen(strFilename, 'w+');
        fwrite(hFile, 0, 'uint8', nNumEntries-1);
