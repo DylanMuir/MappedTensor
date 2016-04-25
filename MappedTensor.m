@@ -75,8 +75,8 @@
 %
 % Dot referencing ('.') is not supported.
 %
-% sum(mtVar <, nDimension>) is supported, to avoid importing the entire tensor
-% into memory. Trailing strings ('native, 'double', etc.) are also supported.
+% sum(mtVar <, nDimension, strOutType>) is supported, to avoid importing
+% the entire tensor into memory.
 %
 % Convenience functions:
 %    SliceFunction: Execute a function on the entire tensor, by slicing it along
@@ -144,6 +144,9 @@
 
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 19th November, 2010
+%
+% Thanks to @marcsous (https://github.com/marcsous) for bug reports and
+% fixes.
 
 classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = private)
@@ -171,7 +174,7 @@ classdef MappedTensor < handle
       hRepSumFunc;            % Handle to the (hopefully compiled) repsum function
       hChunkLengthFunc;       % Handle to the (hopefully compiled) chunk length function
    end
-
+   
    methods
       %% MappedTensor - CONSTRUCTOR
       function [mtVar] = MappedTensor(varargin)
@@ -233,13 +236,14 @@ classdef MappedTensor < handle
          % - Should we map a file on disk, or create a temporary file?
          if (ischar(varargin{1}))
             % - Open an existing file
-            vnTensorSize = [varargin{2:end}];
+            vnTensorSize = double([varargin{2:end}]);
             mtVar.strRealFilename = varargin{1};
             mtVar.bTemporary = false;
+            
          else
             % - Create a temporary file
             mtVar.bTemporary = true;
-            vnTensorSize = [varargin{:}];
+            vnTensorSize = double([varargin{:}]);
          end
 
          % - If only one dimension was provided, assume the matrix is
@@ -247,28 +251,25 @@ classdef MappedTensor < handle
          if (isscalar(vnTensorSize))
             vnTensorSize = vnTensorSize * [1 1];
          end
-         
+                     
          % - Get a handle to the appropriate shim function
          [mtVar.hShimFunc, ...
-             mtVar.hRepSumFunc, ...
-             mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
-
-         % - Make sure dimensions are acceptable - note: can't cope with 0 dims
-         validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
-         
-         % - Cast to double to avoid overflow and for mex compatiblity
-         vnTensorSize = double(vnTensorSize);
-         
-         % - Ignore trailing singleton dimensions
-         while (vnTensorSize(end) == 1 && (numel(vnTensorSize) > 2))
-             vnTensorSize(end) = [];
+          mtVar.hRepSumFunc, ...
+          mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
+      
+         % - Validate tensor size argument
+         try
+            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
+         catch
+            error('MappedTensor:Arguments', ...
+               '*** MappedTensor: Error: ''vnTensorSize'' must be a positive integer vector.');
          end
-         
+
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
-
+         
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
             [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
@@ -294,7 +295,7 @@ classdef MappedTensor < handle
          
          % - Record number of total elements
          mtVar.nNumElements = prod(vnTensorSize);
-         
+
          % - Record the original tensor size
          mtVar.vnOriginalSize = vnTensorSize;
       end
@@ -339,7 +340,7 @@ classdef MappedTensor < handle
             error('MappedTensor:InvalidReferencing', ...
                '*** MappedTensor: ''{}'' and ''.'' referencing methods are not supported by MappedTensor objects.');
          end
- 
+         
          % - Check reference type
          switch (subs(1).type)
             case {'.', '{}'}
@@ -362,7 +363,7 @@ classdef MappedTensor < handle
       function [tfData] = my_subsref(mtVar, S)
          % - Test for valid subscripts
          cellfun(@isvalidsubscript, S.subs);
-
+         
          % - Re-order reference indices
          nNumDims = numel(S.subs);
          nNumTotalDims = numel(mtVar.vnDimensionOrder);
@@ -374,7 +375,7 @@ classdef MappedTensor < handle
             if (nNumDims == 1)
                % - Translate from linear refs to indices
                nNumDims = nNumTotalDims;
-
+               
                % - Translate colon indexing
                if (iscolon(S.subs{1}))
                   S.subs{1} = (1:numel(mtVar))';
@@ -382,11 +383,11 @@ classdef MappedTensor < handle
                
                % - Get equivalent subscripted indexes
                [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
-
+               
                % - Permute indices and convert back to linear indexing
                vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-
+               
                try
                   S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
                catch
@@ -425,7 +426,7 @@ classdef MappedTensor < handle
                   error('MappedTensor:badsubscript', ...
                      '*** MappedTensor: Subscript out of range.');
                end
-
+               
                % - Permute index order
                vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
                vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
@@ -485,10 +486,11 @@ classdef MappedTensor < handle
          % - Permute input data
          tfData = ipermute(tfData, mtVar.vnDimensionOrder);
          
-         if (~isreal(tfData)) || (~isreal(mtVar)) 
+         if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
             mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
             mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+
          else
             % - Assign only real part
             mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
@@ -505,7 +507,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% Overloaded methods (size, numel, ndims, permute, ipermute, ctranspose, transpose, isreal)
+      %% Overloaded methods (size, numel, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
@@ -550,18 +552,6 @@ classdef MappedTensor < handle
          end
       end
       
-      % numel - METHOD Overloaded numel function
-      function [nNumElem] = numel(mtVar, varargin)
-         % - If varargin contains anything, a cell reference "{}" was attempted
-         if (~isempty(varargin))
-            error('MappedTensor:cellRefFromNonCell', ...
-               '*** MappedTensor: Cell contents reference from non-cell obejct.');
-         end
-         
-         % - Return the total number of elements in the tensor
-         nNumElem = mtVar.nNumElements;
-      end
-      
       % ndims - METHOD Overloaded ndims function
       function [nDim] = ndims(mtVar, varargin)
           % - If varargin contains anything, a cell reference "{}" was attempted
@@ -572,6 +562,18 @@ classdef MappedTensor < handle
           
           % - Return the total number of dimensions in the tensor
           nDim = length(size(mtVar));
+      end
+      
+      % numel - METHOD Overloaded numel function
+      function [nNumElem] = numel(mtVar, varargin)
+         % - If varargin contains anything, a cell reference "{}" was attempted
+         if (~isempty(varargin))
+            error('MappedTensor:cellRefFromNonCell', ...
+               '*** MappedTensor: Cell contents reference from non-cell obejct.');
+         end
+         
+         % - Return the total number of elements in the tensor
+         nNumElem = mtVar.nNumElements;
       end
       
       % permute - METHOD Overloaded permute function
@@ -831,27 +833,70 @@ classdef MappedTensor < handle
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
-         % - Use built-in "sum" on an empty matrix similar to mtVar to validate
-         % inputs and get output class, output size and summation dimension
-         if isequal(mtVar.strClass,'logical')
-             tmp = sum(false([vnTensorSize 0]),varargin{:});
-         else
-             tmp = sum(zeros([vnTensorSize 0],mtVar.strClass),varargin{:});
+         % - By default, sum along first non-singleton dimension
+         DEF_nDim = find(vnTensorSize > 1, 1, 'first');
+         
+         % - By default, accumulate in a double tensor
+         DEF_strReturnClass = 'double';
+         
+         % - Check arguments and apply defaults
+         if (nargin > 3)
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: Too many arguments were supplied.');
+         
+         elseif (nargin == 3)
+
+         elseif (nargin == 2)
+            if (ischar(varargin{1}))
+               varargin{2} = varargin{1};
+               varargin{1} = DEF_nDim;
+                           
+            else
+               varargin{2} = DEF_strReturnClass;
+            end
+         
+         elseif (nargin == 1)
+            varargin{1} = DEF_nDim;
+            varargin{2} = DEF_strReturnClass;
          end
          
-         outtype = class(tmp);
-         vnSumSize = size(tmp);
-         vnSumSize = vnSumSize(1:ndims(mtVar));
-         nDim = find(vnTensorSize-vnSumSize);
+         % - Was a valid dimension specified?
+         try
+            validateattributes(varargin{1}, {'numeric'}, {'positive', 'integer', 'scalar'});
+         catch
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: ''dim'' must be supplied as a positive scalar number.');
+         end
+         nDim = varargin{1};
          
-         % - Short cut for the case when we return the whole matrix
-         if isempty(nDim)
-             tFinalSum = cast(mtVar,outtype);
-             return;
+         % - Was a valid output argument type specified?
+         try
+            strReturnClass = validatestring(lower(varargin{2}), {'native', 'double', 'default'});
+         catch
+            error('MappedTensor:sum:InvalidArguments', ...
+               '*** MappedTensor/sum: ''outtype'' must be one of {''double'', ''native'', ''default''}.');
+         end
+
+         % - Get the class for the summation matrix
+         if (strcmp(strReturnClass, 'native'))
+            % - Logicals are always summed in a double tensor
+            if (islogical(mtVar))
+               strOutputClass = 'double';
+            else
+               strOutputClass = mtVar.strClass;
+            end
+         
+         elseif (strcmp(strReturnClass, 'default'))
+            strOutputClass = DEF_strReturnClass;
+            
+         else %if (strcmp(strReturnClass, 'double'))
+            strOutputClass = strReturnClass;
          end
          
          % -- Sum in chunks to avoid allocating full tensor
          nElementsInChunk = 100000;
+         vnSumSize = vnTensorSize;
+         vnSumSize(nDim) = 1;
          vnSliceDimensions = cumprod(vnTensorSize);
          
          % - Compute the size of a single split
@@ -870,11 +915,7 @@ classdef MappedTensor < handle
          end
          
          % -- Perform sum by taking dimensions in turn
-         if isequal(outtype,'logical')
-            tFinalSum = false(vnSumSize);
-         else
-            tFinalSum = zeros(vnSumSize, outtype);
-         end
+         tFinalSum = zeros(vnSumSize, strOutputClass);
          
          % - Construct referencing structures
          sSourceRef = substruct('()', ':');
@@ -894,7 +935,7 @@ classdef MappedTensor < handle
             % - Call subsasgn, subsref and sum to process data
             sSourceRef.subs = cellTheseSourceIndices;
             sDestRef.subs = cellTheseDestIndices;
-            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), varargin{:}));
+            tFinalSum = subsasgn(tFinalSum, sDestRef, subsref(tFinalSum, sDestRef) + sum(subsref(mtVar, sSourceRef), nDim, strReturnClass));
             
             % - Increment first non-max index
             nIncrementDim = find(vnSplitIndices <= vnNumDivisions, 1, 'first');
@@ -940,7 +981,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [~, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
+            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -969,7 +1010,7 @@ classdef MappedTensor < handle
          % - Which dimension should we go along?
          if (nargin < 3)
             % - Find the first non-singleton dimension
-            [~, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
+            [nul, nDim] = find(vnSize > 1, 1, 'first'); %#ok<ASGLU>
          else
             nDim = varargin{2};
          end
@@ -1258,7 +1299,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename, mtVar.strMachineFormat);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
@@ -1331,12 +1372,17 @@ end
 function strFilename = create_temp_file(nNumEntries)
    % - Get the name of a temporary file
    strFilename = tempname;
-
+   
     % - Fast allocation on some platforms
-    [status, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+    bFailed = true;
+    if ispc()
+       [bFailed, ~] = system(sprintf('fsutil file createnew %s %i', file, nbytes));
+    else
+       [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+    end
 
-    % - Slow fallback -- use Matlab
-    if (status)
+    % - Slow fallback -- use Matlab to write data directly
+    if (bFailed)
        hFile = fopen(strFilename, 'w+');
        fwrite(hFile, 0, 'uint8', nNumEntries-1);
        fclose(hFile);
@@ -1607,12 +1653,12 @@ function isvalidsubscript(oRefs)
          
       else
          % - Test for normal indexing
-         validateattributes(oRefs, {'numeric'}, {'positive', 'integer'});
+         validateattributes(oRefs, {'numeric'}, {'integer', 'real', 'positive'});
       end
-
+      
    catch
       error('MappedTensor:badsubscript', ...
-            '*** MappedTensor: Subscript indices must either be positive integers or logicals.');
+            '*** MappedTensor: Subscript indices must either be real positive integers or logicals.');
    end
 end
 
@@ -1637,7 +1683,7 @@ function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strCl
    
    % - Maximise chunk probability and minimise number of reads by reading
    % only sorted unique entries
-   [vnLinearIndices, ~, vnReverseSort] = unique_accel(vnLinearIndices); %#ok<ASGLU>
+   [vnLinearIndices, nul, vnReverseSort] = unique_accel(vnLinearIndices); %#ok<ASGLU>
    
    % - Split into readable chunks
    mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
@@ -1740,6 +1786,42 @@ function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices
    end
 end
 
+% mt_read_all - FUNCTION Read the entire stack
+function [tData] = mt_read_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, ~)
+   % - Allocate data
+   [~, strStorageClass] = ClassSize(strClass);
+%    tData = zeros(vnTensorSize, strStorageClass);
+   
+   % - Seek file to beginning of data
+   fseek(hDataFile, nHeaderBytes, 'bof');
+   
+   % - Normal forward read
+   tData = fread(hDataFile, prod(vnTensorSize), [strStorageClass '=>' strClass], 0);
+end
+
+% mt_write_all - FUNCTION Write the entire stack
+function mt_write_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, tData, ~)
+
+   % - Do we need to replicate the data?
+   if (isscalar(tData) && prod(vnTensorSize) > 1)
+      tData = repmat(tData, prod(vnTensorSize), 1);
+
+   elseif (numel(tData) ~= prod(vnTensorSize))
+      % - The was a mismatch in the sizes of the left and right sides
+      error('MappedTensor:index_assign_element_count_mismatch', ...
+            '*** MappedTensor: In an assignment A(I) = B, the number of elements in B and I must be the same.');
+   end
+   
+   % - Get storage class
+   [~, strStorageClass] = ClassSize(strClass);
+
+   % - Seek file to beginning of data
+   fseek(hDataFile,  nHeaderBytes, 'bof');
+      
+   % - Normal forward write of data
+   fwrite(hDataFile, tData, strStorageClass, 0);
+end
+
 % ConvertColonCheckLims - FUNCTION Convert colon referencing to subscript indices; check index limits
 function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, hRepSumFunc)
    % - Handle linear indexing
@@ -1769,8 +1851,8 @@ function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, h
             '*** MappedTensor: Index exceeds matrix dimensions.');
          
       else
-          % - This dimension was ok -- cast to double to avoid overflow and for mex compatibility
-          cCheckedRefs{nRefDim} = double(cRefs{nRefDim});
+         % - This dimension was ok, convert to double
+         cCheckedRefs{nRefDim} = double(cRefs{nRefDim});
       end
    end
    
@@ -1902,7 +1984,7 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
       case 'open'
          if (nargin == 2)
             [varargout{1}] = fopen(varargin{1}, 'r+');
-            [~, ~, varargout{2}, ~] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
+            [nul, nul, varargout{2}, nul] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
          else
             varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
          end
@@ -1915,6 +1997,12 @@ function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
          
       case 'write_chunks'
          mt_write_data_chunks(varargin{1:7});
+         
+      case 'read_all'
+         varargout{1} = mt_read_all(varargin{1:5});
+         
+      case 'write_all'
+         varargout{1} = mt_write_all(varargin{1:6});
    end
 end
 
@@ -1953,7 +2041,7 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
       hShimFunc = @mapped_tensor_shim;
       hRepSumFunc = @mapped_tensor_repsum;
       hChunkLengthFunc = @mapped_tensor_chunklength;
-
+      
    else
       % - Just use the slow matlab version
       warning('MappedTensor:MEXCompilation', ...
