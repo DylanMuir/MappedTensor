@@ -1827,6 +1827,9 @@ end
 
 % ConvertColonCheckLims - FUNCTION Convert colon referencing to subscript indices; check index limits
 function [vnLinearIndices, vnDataSize] = ConvertColonsCheckLims(cRefs, vnLims, hRepSumFunc)
+   % - Fill trailing referenced dimension limits
+   vnLims(end+1:numel(cRefs)) = 1;
+
    % - Handle linear indexing
    if (numel(cRefs) == 1)
       vnLims = prod(vnLims);
@@ -1872,6 +1875,9 @@ function [vnLinearIndices, vnDimRefSizes] = GetLinearIndicesForRefs(cRefs, vnLim
 
    % - Find colon references
    vbIsColon = cellfun(@iscolon, cRefs);
+   
+   % - Fill trailing referenced dimension limits
+   vnLims(end+1:numel(cRefs)) = 1;
    
    % - Catch "reference whole stack" condition
    if (all(vbIsColon))
