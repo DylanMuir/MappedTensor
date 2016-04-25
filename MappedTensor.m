@@ -178,6 +178,13 @@ classdef MappedTensor < handle
    methods
       %% MappedTensor - CONSTRUCTOR
       function [mtVar] = MappedTensor(varargin)
+
+         % - Get a handle to the appropriate shim function (should be done
+         %     before any errors are thrown)
+         [mtVar.hShimFunc, ...
+          mtVar.hRepSumFunc, ...
+          mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
+         
          % - Filter arguments for properties
          vbKeepArg = true(numel(varargin), 1);
          nArg = 2;
@@ -211,7 +218,7 @@ classdef MappedTensor < handle
                   otherwise
                      % - No other properties are supported
                      error('MappedTensor:InvalidProperty', ...
-                        '*** MappedTensor: ''%s'' is not a valid property.  Use the ''Class'' keyword to specify the tensor class.', varargin{nArg});
+                        '*** MappedTensor: ''%s'' is not a valid property.', varargin{nArg});
                end
             end
             
@@ -251,7 +258,6 @@ classdef MappedTensor < handle
          if (isscalar(vnTensorSize))
             vnTensorSize = vnTensorSize * [1 1];
          end
-                     
          
          % - Validate tensor size argument
          try
@@ -260,16 +266,11 @@ classdef MappedTensor < handle
             error('MappedTensor:Arguments', ...
                '*** MappedTensor: Error: ''vnTensorSize'' must be a positive integer vector.');
          end
-         
+
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
             mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
          end
-         
-         % - Get a handle to the appropriate shim function
-         [mtVar.hShimFunc, ...
-          mtVar.hRepSumFunc, ...
-          mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
@@ -291,14 +292,19 @@ classdef MappedTensor < handle
                      '*** MappedTensor: Error: only ''ieee-be'' and ''ieee-le'' machine formats are supported.');
          end
          
+         % - Record the original tensor size, remove trailing unitary dimensions
+         if (vnTensorSize(end) == 1) && (numel(vnTensorSize) > 2)
+            nLastNonUnitary = max(2, find(vnTensorSize ~= 1, 1, 'last'));
+            vnTensorSize = vnTensorSize(1:nLastNonUnitary);
+         end
+         
+         mtVar.vnOriginalSize = vnTensorSize;
+
          % - Initialise dimension order
          mtVar.vnDimensionOrder = 1:numel(vnTensorSize);
          
          % - Record number of total elements
          mtVar.nNumElements = prod(vnTensorSize);
-         
-         % - Record the original tensor size
-         mtVar.vnOriginalSize = vnTensorSize;
       end
       
       % delete - DESTRUCTOR
@@ -487,7 +493,7 @@ classdef MappedTensor < handle
          % - Permute input data
          tfData = ipermute(tfData, mtVar.vnDimensionOrder);
          
-         if (~isreal(tfData))
+         if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
             mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
             mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
@@ -1376,7 +1382,11 @@ function strFilename = create_temp_file(nNumEntries)
    
     % - Fast allocation on some platforms
     bFailed = true;
-%     [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+%     if ispc()
+%        [bFailed, ~] = system(sprintf('fsutil file createnew %s %i', file, nbytes));
+%     else
+%        [bFailed, ~] = system(sprintf('fallocate -l %i %s', nNumEntries, strFilename));
+%     end
 
     % - Slow fallback -- use Matlab to write data directly
     if (bFailed)
