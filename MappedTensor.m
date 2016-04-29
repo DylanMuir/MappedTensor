@@ -471,7 +471,10 @@ classdef MappedTensor < handle
       end
       
       % subsasgn - METHOD Overloaded subsasgn
-      function [mtVar] = subsasgn(mtVar, subs, tfData)
+      function [mtVar] = subsasgn(mtVar, S, tfData)
+         % - Test for valid subscripts
+         cellfun(@isvalidsubscript, S.subs);
+
          % - Test read-only status if tensor
          if (mtVar.bReadOnly)
             error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
@@ -495,12 +498,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, subs, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -514,7 +517,7 @@ classdef MappedTensor < handle
          end
       end
       
-      %% Overloaded methods (size, numel, permute, ipermute, ctranspose, transpose, isreal)
+      %% Overloaded methods (size, numel, ndims, length, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
          % - Get original tensor size, and extend dimensions if necessary
@@ -583,6 +586,11 @@ classdef MappedTensor < handle
          nNumElem = mtVar.nNumElements;
       end
       
+      % length - METHOD Overloaded length function
+      function [nLength] = length(mtVar)
+         nLength = max(size(mtVar));
+      end
+      
       % permute - METHOD Overloaded permute function
       function [mtVar] = permute(mtVar, vnNewOrder)
          vnCurrentOrder = mtVar.vnDimensionOrder;
@@ -647,8 +655,18 @@ classdef MappedTensor < handle
       end
       
       % isnan - METHOD Overloaded isnan function
-      function [bIsNan] = isnan(mtVar) %#ok<MANU>
-         bIsNan = false;
+      function [tbIsNan] = isnan(mtVar)
+         tbIsNan = reshape(isnan(mtVar(:)), size(mtVar));
+      end
+      
+      % isfloat - METHOD Overloaded isfloat function
+      function [bIsFloat] = isfloat(mtVar)
+         bIsFloat = isequal(mtVar.strClass, 'single') || isequal(mtVar.strClass, 'double');
+      end
+      
+      % isinteger - METHOD Overloaded isinteger function
+      function [bIsInteger] = isinteger(mtVar)
+         bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
       end
       
       %% Overloaded methods (uminus, uplus, times, mtimes, ldivide, rdivide, mldivide, mrdivide)
