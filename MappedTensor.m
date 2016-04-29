@@ -149,7 +149,7 @@
 % fixes.
 
 classdef MappedTensor < handle
-   properties (SetAccess = private, GetAccess = private)
+   properties (SetAccess = private, GetAccess = public)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
       bReadOnly = false;      % Should the data be protected from writing?
@@ -444,11 +444,11 @@ classdef MappedTensor < handle
          % - Reference the tensor data element
          if (mtVar.bIsComplex)
             % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
+            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
+                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
          else
             % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
          
          % - Permute dimensions
@@ -498,12 +498,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -1382,12 +1382,42 @@ classdef MappedTensor < handle
          tfData = cast(mtVar, 'double');
       end
       
-      function tfData = cast(mtVar, strClass)
-         warning('MappedTensor:WholeTensor', ...
-                 '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
-              
-         sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
-         tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+      % cast - Overloaded "cast" method.
+      %
+      % Usage: tfData = cast(mtVar, strClass <, bForce>)
+      %
+      % See the documentation for the built-in "cast" function.
+      %
+      % The optional parameter 'bForce' 
+      function tfData = cast(mtVar, strClass, bForce)
+         % - Should we really cast the entire tensor?
+         if (~exist('bForce', 'var') || isempty(bForce))
+            bForce = false;
+         end
+         
+         % - Validate the class
+         try
+            sSubs = substruct('()', {1});
+            cast(subsref(mtVar, sSubs), strClass);
+         catch
+            error('MappedTensor:cast:UnsupportedCLass', ...
+                  '*** MappedTensor: Error: Unsupported data type for conversion: ''%s''', strClass);
+         end
+         
+         % - Cast the object
+         if (bForce)
+            warning('MappedTensor:WholeTensor', ...
+               '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
+            
+            sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
+            tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+            
+         else
+            % - Do a transparent cast
+            tfData = mtVar;
+            mtVar.bMustCast = true;
+            mtVar.strClass = strClass;
+         end
       end
    end
 end
