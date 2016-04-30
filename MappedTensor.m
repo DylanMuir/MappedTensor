@@ -502,15 +502,29 @@ classdef MappedTensor < handle
          end
          
          % - Reference the tensor data element
+         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         
          if (mtVar.bIsComplex)
-            % - Get the real and complex parts
-            tfData = complex(mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc), ...
-                             mtVar.fComplexFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc));
-         else
-            % - Just return the real part
-            tfData = mtVar.fRealFactor .* mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         end
+            
+         % - Cast data, if required
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
+            
+            if (mtVar.bIsComplex)
+               tfImagData = cast(tfImagData, mtVar.strClass);
+            end
          end
          
+         % - Apply scaling factors
+         if (mtVar.bIsComplex)
+            tfData = complex(mtVar.fRealFactor .* tfData, ...
+                             mtVar.fComplexFactor .* tfImagData);
+         else
+            tfData = mtVar.fRealFactor .* tfData;
+         end
+                  
          % - Permute dimensions
          tfData = permute(tfData, mtVar.vnDimensionOrder);
          
@@ -522,11 +536,6 @@ classdef MappedTensor < handle
          elseif (nNumDims < nNumTotalDims)
             cnSize = num2cell(size(tfData));
             tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
-         end
-         
-         % - Cast data, if required
-         if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
          end
       end
       
@@ -772,7 +781,7 @@ classdef MappedTensor < handle
          mtVar.fRealFactor = mtVar.fRealFactor .* fScalar;
          
          if (mtVar.bIsComplex)
-            mtVar.fCmplxFactor = mtVar.fCmplxFactor .* fScalar;
+            mtVar.fComplexFactor = mtVar.fComplexFactor .* fScalar;
          end
       end
       
