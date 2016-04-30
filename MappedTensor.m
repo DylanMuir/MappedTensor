@@ -261,7 +261,7 @@ classdef MappedTensor < handle
          
          % - Validate tensor size argument
          try
-            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer'});
+            validateattributes(vnTensorSize, {'numeric'}, {'positive', 'integer', 'nonempty'});
          catch
             error('MappedTensor:Arguments', ...
                '*** MappedTensor: Error: ''vnTensorSize'' must be a positive integer vector.');
