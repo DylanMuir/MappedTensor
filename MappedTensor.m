@@ -22,6 +22,8 @@
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
 %           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
 %           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
+%           mtVariable = MappedTensor(tExistingTensor, 'Convert')
+%           mtVariable = MappedTensor(..., 'Like', tExistingTensor)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -46,6 +48,13 @@
 % The optional parameter 'strMachineFormat' allows you to speciy big-endian
 % ('ieee-be') or little-endian ('ieee-le') formats for data storage and
 % reading.  If not specified, the machine-native format will be used.
+%
+% The optional argument 'Convert' allows you to convert an existing matlab
+% tensor 'tExistingTensor' into a MappedTensor, of the appropriate class.
+%
+% The optional argument 'Like' allows you to create a MappedTensor with the
+% same class and complexity (i.e. real and complex) of 'tExistingTensor'.
+% Note that sparse MappedTensors are not supported.
 %
 % Usage: size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
@@ -215,6 +224,52 @@ classdef MappedTensor < handle
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
+                  case {'convert'}
+                     % - Convert an existing tensor into a MappedTensor
+                     if (nargin > 2)
+                        error('MappedTensor:Usage', ...
+                              '*** MappedTensor: Only a single input argument is required when using ''Convert''.');
+                     end
+                     
+                     % - Do we already have a MappedTensor?
+                     if (isa(varargin{1}, 'MappedTensor'))
+                        % - Just return it
+                        mtVar = varargin{1};
+                        return;
+                        
+                     else
+                        % - Get the
+                        tfSourceTensor = varargin{1};
+
+                        % - Check the size of the incoming tensor
+                        if (numel(tfSourceTensor) == 0)
+                           error('MappedTensor:Arguments', ...
+                                 '*** MappedTensor: A zero-sized tensor cannot be converted to a MappedTensor.');
+                        end
+                        
+                        % - Remove 'Convert' arguments from varargin
+                        varargin([1 nArg]) = [];
+                        
+                        % - Create a MappedTensor
+                        mtVar = MappedTensor(size(tfSourceTensor), varargin{:}, 'Like', tfSourceTensor);
+                        
+                        % - Copy the data
+                        subsasgn(mtVar, substruct('()', {':'}), tfSourceTensor);
+                        return;
+                     end
+                     
+                  case {'like'}
+                     % - Set the class property accordingly
+                     mtVar.strClass = class(varargin{nArg+1});
+                     
+                     % - Set the complexity (real or complex) accordingly
+                     if (~isreal(varargin{nArg+1}))
+                        mtVar.bIsComplex = true;
+                     end
+                     
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                     
                   otherwise
                      % - No other properties are supported
                      error('MappedTensor:InvalidProperty', ...
@@ -305,6 +360,11 @@ classdef MappedTensor < handle
          
          % - Record number of total elements
          mtVar.nNumElements = prod(vnTensorSize);
+         
+         % - Set complexity
+         if (mtVar.bIsComplex)
+            make_complex(mtVar);
+         end
       end
       
       % delete - DESTRUCTOR
