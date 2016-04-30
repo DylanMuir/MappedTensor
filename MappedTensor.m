@@ -525,6 +525,12 @@ classdef MappedTensor < handle
             tfData = mtVar.fRealFactor .* tfData;
          end
                   
+         % - Recast data, if required, to take into account scaling in
+         % other class
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
+         end
+         
          % - Permute dimensions
          tfData = permute(tfData, mtVar.vnDimensionOrder);
          
