@@ -711,7 +711,7 @@ classdef MappedTensor < handle
       
       % isnumeric - METHOD Overloaded isnumeric function
       function [bIsNumeric] = isnumeric(mtVar)
-         bIsNumeric = ~islogical(mtVar);
+         bIsNumeric = ~islogical(mtVar) && ~ischar(mtVar);
       end
       
       % isscalar - METHOD Overloaded isscalar function
