@@ -53,7 +53,7 @@
 % tensor 'tExistingTensor' into a MappedTensor, of the appropriate class.
 %
 % The optional argument 'Like' allows you to create a MappedTensor with the
-% same class and complexity (i.e. real and complex) of 'tExistingTensor'.
+% same class and complexity (i.e. real or complex) of 'tExistingTensor'.
 % Note that sparse MappedTensors are not supported.
 %
 % Usage: size(mtVariable)
@@ -77,6 +77,13 @@
 % Unary plus (+A) and minus (-A) are supported.  Binary plus (A+B), minus (A-B),
 % times (A*B, A.*B) as long as one of A or B is a scalar.  Divide (A/B,
 % A./B, B\A, B.\A) is supported, as long as B is a scalar.
+%
+% Transparent casting to other classes is supported in O(1) time. Note that
+% due to transparent casting and tranparent O(1) scaling, rounding may
+% occur in a different class to the returned data, and therefore may not
+% match matlab rounding precisely. If this is an issue, index the tensor
+% and then scale the returned values rather than rely on O(1) scaling of
+% the entire tensor.
 %
 % Save and load is minimally supported -- data is NOT saved, but on load a new
 % mapped tensor will be generated and filled with zeros.  Both save and load
@@ -524,9 +531,9 @@ classdef MappedTensor < handle
          else
             tfData = mtVar.fRealFactor .* tfData;
          end
-                  
-         % - Recast data, if required, to take into account scaling in
-         % other class
+         
+         % - Recast data, if required, to take into account scaling which
+         % can occur in another class
          if (mtVar.bMustCast)
             tfData = cast(tfData, mtVar.strClass);
          end
@@ -565,7 +572,13 @@ classdef MappedTensor < handle
          
          % - Cast data, if required
          if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strStorageClass);
+            if (mtVar.bIsComplex)
+               tfData = complex(cast(real(tfData) ./ mtVar.fRealFactor, mtVar.strStorageClass), ...
+                                cast(imag(tfData) ./ mtVar.fComplexFactor, mtVar.strStorageClass));
+                             
+            else
+               tfData = cast(tfData ./ mtVar.fRealFactor, mtVar.strStorageClass);
+            end
          end
          
          % - Permute input data
@@ -573,12 +586,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, real(tfData) ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, imag(tfData) ./ mtVar.fComplexFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, real(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, imag(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, tfData ./ mtVar.fRealFactor, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, tfData, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -742,6 +755,11 @@ classdef MappedTensor < handle
       % isinteger - METHOD Overloaded isinteger function
       function [bIsInteger] = isinteger(mtVar)
          bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
+      end
+      
+      % strfind - METHOD Overloaded strfind function
+      function [nLoc] = strfind(mtVar, varargin) %#ok<INUSD>
+         nLoc =[];
       end
       
       %% Overloaded methods (uminus, uplus, times, mtimes, ldivide, rdivide, mldivide, mrdivide)
