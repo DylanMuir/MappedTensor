@@ -759,6 +759,8 @@ classdef MappedTensor < handle
       
       % strfind - METHOD Overloaded strfind function
       function [nLoc] = strfind(mtVar, varargin) %#ok<INUSD>
+         warning('MappedTensor:Unsupported', ...
+                 '--- MappedTensor/strfind: Warning: strfind is not supported.');
          nLoc =[];
       end
       
