@@ -118,6 +118,6 @@ Please cite our publication in lieu of thanks, if you use this code.
 
 [1]: http://www.mathworks.com
 [2]: http://www.mathworks.com/help/techdoc/ref/memmapfile.html
-[3]: /resources/code/MappedTensor.zip
+[3]: https://github.com/DylanMuir/MappedTensor/releases/latest
 [4]: http://www.frontiersin.org/neuroinformatics
 [5]: http://dx.doi.org/10.3389/fninf.2014.00085
