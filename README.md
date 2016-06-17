@@ -29,14 +29,30 @@ as it signals to [Matlab][2] that this is a class directory.
     mtVariable = MappedTensor(nDim1, nDim2, nDim3, ...)
     mtVariable = MappedTensor(strExistingFilename, ...)
     mtVariable = MappedTensor(..., 'Class', strClassName)
+    mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
+    mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
+    mtVariable = MappedTensor(tExistingTensor, 'Convert')
+    mtVariable = MappedTensor(..., 'Like', tExistingTensor)
+    mtVariable = MappedTensor(..., 'ReadOnly', bReadOnly)
 
 `vnTensorSize`, or [`nDim1 nDim2 nDim3 ...]` defines the desired size of the variable. By default, a new binary
 temporary file will be generated, and deleted when the `mtVariable` is destroyed. `strExistingFilename` can be
 used to map an existing file on disk, but the full size (and class) of the file must be known and specified in
 advance. This file will not be removed when all handle references are destroyed.
 
-By default the tensor will have class `double`. This can be specified as an argument to `MappedTensor`. Supported
+By default the tensor will have class `double`. This can be specified as an argument to `MappedTensor`, using the optional `Class` argument. Supported
 classes: `char`, `int8`, `uint8`, `logical`, `int16`, `uint16`, `int32`, `uint32`, `single`, `int64`, `uint64`, `double`.
+
+`MappedTensor` can skip any header information at the start of the file, by specifying the size of the header in bytes using the optional `nHeaderBytesToSkip` argument.
+
+The optional parameter `strMachineFormat` allows you to specify big-endian (`'ieee-be'`) or little-endian (`'ieee-le'`) formats for data storage and reading.  If not specified, the machine-native format will be used.
+
+The optional argument `'Convert'` allows you to convert an existing matlab tensor 'tExistingTensor' into a MappedTensor, of the appropriate class.
+
+The optional argument `'Like'` allows you to create a MappedTensor with the same class and complexity (i.e. real or complex) of `tExistingTensor`. Note that sparse MappedTensors are not supported.
+
+The optional argument `bReadOnly` allows you to specify that the data should be accessed in read only mode.
+
 
 ## Usage examples
 

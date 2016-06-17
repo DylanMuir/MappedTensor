@@ -24,6 +24,7 @@
 %           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
 %           mtVariable = MappedTensor(tExistingTensor, 'Convert')
 %           mtVariable = MappedTensor(..., 'Like', tExistingTensor)
+%           mtVariable = MappedTensor(..., 'ReadOnly', bReadOnly)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -45,9 +46,10 @@
 % beginning of an (existing) binary file, by throwing away the specified
 % number of header bytes.
 %
-% The optional parameter 'strMachineFormat' allows you to speciy big-endian
-% ('ieee-be') or little-endian ('ieee-le') formats for data storage and
-% reading.  If not specified, the machine-native format will be used.
+% The optional parameter 'strMachineFormat' allows you to specify
+% big-endian ('ieee-be') or little-endian ('ieee-le') formats for data
+% storage and reading.  If not specified, the machine-native format will be
+% used.
 %
 % The optional argument 'Convert' allows you to convert an existing matlab
 % tensor 'tExistingTensor' into a MappedTensor, of the appropriate class.
@@ -55,6 +57,9 @@
 % The optional argument 'Like' allows you to create a MappedTensor with the
 % same class and complexity (i.e. real or complex) of 'tExistingTensor'.
 % Note that sparse MappedTensors are not supported.
+%
+% The optional argument 'bReadOnly' allows you to specify that the data
+% should be accessed in read only mode.
 %
 % Usage: size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
@@ -340,9 +345,9 @@ classdef MappedTensor < handle
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
-            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
+            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename);
          else
-            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.strRealFilename, mtVar.strMachineFormat);
+            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename, mtVar.strMachineFormat);
          end
             
          % - Check machine format
@@ -1371,7 +1376,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename, mtVar.strMachineFormat);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename, mtVar.strMachineFormat, mtVar.bReadOnly);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
@@ -2091,11 +2096,17 @@ end
 function [varargout] = mapped_tensor_shim_nomex(strCommand, varargin)
    switch (strCommand)
       case 'open'
-         if (nargin == 2)
-            [varargout{1}] = fopen(varargin{1}, 'r+');
+         if (varargin{1})
+            strMode = 'r';
+         else
+            strMode = 'r+';
+         end
+         
+         if (nargin == 3)
+            [varargout{1}] = fopen(varargin{2}, strMode);
             [nul, nul, varargout{2}, nul] = fopen(varargout{1}); %#ok<ASGLU,NASGU>
          else
-            varargout{1} = fopen(varargin{1}, 'r+', varargin{2});
+            varargout{1} = fopen(varargin{2}, strMode, varargin{3});
          end
          
       case 'close'
