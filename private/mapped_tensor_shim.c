@@ -72,12 +72,12 @@
 
 /* -- Command definitions */
         
-#define  CMD_OPEN_FILE     "open"
-#define  CMD_CLOSE_FILE    "close"
-#define  CMD_READ_CHUNKS   "read_chunks"
-#define  CMD_WRITE_CHUNKS  "write_chunks"
-#define	CMD_READ_ALL		"read_all"
-#define	CMD_WRITE_ALL		"write_all"
+#define  CMD_OPEN_FILE           "open"
+#define  CMD_CLOSE_FILE          "close"
+#define  CMD_READ_CHUNKS         "read_chunks"
+#define  CMD_WRITE_CHUNKS        "write_chunks"
+#define	CMD_READ_ALL            "read_all"
+#define	CMD_WRITE_ALL           "write_all"
 
 #define  DEF_MAX_WRITE_ALL_CHUNK 10000000
 
@@ -178,39 +178,60 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 
 /* -- Command functions */
 
-/* Usage: [hFileHandle, strDefaultMachineFormat] = mapped_tensor_shim('open', strFilename); */
+/* Usage: [hFileHandle, strDefaultMachineFormat] = mapped_tensor_shim('open', bReadOnly, strFilename); */
 void CmdOpenFile(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
    /* -- Local variables */
-   char     *strFilename;
-   FILE     *hFile;
-   uint8_t  *uReturnFileHandle;
+   char        *strFilename;
+   FILE        *hFile;
+   uint8_t     *uReturnFileHandle;
+   mxLogical   *bReadOnly;
    
    /* -- Check arguments */
    
-   if (nrhs < 2) {
+   if (nrhs < 3) {
       errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
                 "Not enough arguments for command 'open'.", "");
    }
    
-   if (!mxIsChar(prhs[1])) {
+   if (!mxIsLogical(prhs[1])) {
+      errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
+                "'bReadOnly' must be a logical value.", "");
+   }
+
+   if (!mxIsChar(prhs[2])) {
       errprintf("MappedTensor:mapped_tensor_shim:InvalidArgument",
                 "'strFilename' must be a character array.", "");
    }
    
+   /* - Get read-only flag */
+   bReadOnly = mxGetLogicals(prhs[1]);
+   
    /* - Get filename argument */
-   strFilename = ReadStringArg(prhs[1]);
+   strFilename = ReadStringArg(prhs[2]);
    
    dprintf("mts/cof: Opening file [%s]\n", strFilename);
    
-   /* - Try to open file for reading */
-   if ((hFile = fopen(strFilename, "r+" FILE_FORCE_BINARY)) == NULL) {
-      errprintf("MappedTensor:mapped_tensor_shim:CouldNotOpenFile",
-                "Could not open the requested file.",
-                "Could not open file [%s].  Reason: [%s]\n",
-                strFilename, strerror(errno));
+   if (*bReadOnly) {
+      /* - Try to open file as read-only */
+      dprintf("mts/cof: Opening file in read-only mode.\n", strFilename);
+      if ((hFile = fopen(strFilename, "r" FILE_FORCE_BINARY)) == NULL) {
+         errprintf("MappedTensor:mapped_tensor_shim:CouldNotOpenFile",
+                 "Could not open the requested file.",
+                 "Could not open file [%s].  Reason: [%s]\n",
+                 strFilename, strerror(errno));
+      }
+
+   } else {
+      /* - Try to open file for read-write */
+      dprintf("mts/cof: Opening file in read-write mode.\n", strFilename);
+      if ((hFile = fopen(strFilename, "r+" FILE_FORCE_BINARY)) == NULL) {
+         errprintf("MappedTensor:mapped_tensor_shim:CouldNotOpenFile",
+                 "Could not open the requested file.",
+                 "Could not open file [%s].  Reason: [%s]\n",
+                 strFilename, strerror(errno));
+      }
    }
-   
    
    /* -- Create the return file handle */
    
