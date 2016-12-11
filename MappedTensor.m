@@ -1320,7 +1320,9 @@ classdef MappedTensor < handle
          sVar.strClass = mtVar.strClass;
          sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
          sVar.vnOriginalSize = mtVar.vnOriginalSize;
-         
+         sVar.bReadOnly = mtVar.bReadOnly;
+         sVar.nHeaderBytes = mtVar.nHeaderBytes;
+
          % - Send a warning about poorly-supported loading
          warning('MappedTensor:UnsupportedObjectStorage', ...
             '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
@@ -1331,19 +1333,27 @@ classdef MappedTensor < handle
    methods (Static)
       %% loadobj - METHOD Overloaded load mechanism
       function [mtVar] = loadobj(sSavedVar)
+         % - Put back together arguments used to load the tensor
+         cInputArgs = { ...
+             sSavedVar.vnOriginalSize, ...
+             'Class', sSavedVar.strClass, ...
+             'ReadOnly', sSavedVar.bReadOnly, ...
+             'HeaderBytes', sSavedVar.nHeaderBytes ...
+         };
+
          % - Try to create a new MappedTensor, with the saved parameters
          if (sSavedVar.bTemporary)
             % - Create a transient mapped tensor
-            mtVar = MappedTensor(sSavedVar.vnOriginalSize, 'Class', sSavedVar.strClass);
-            
+            mtVar = MappedTensor(cInputArgs{:});
+
          else
             % - Map an existing file on disk
-            mtVar = MappedTensor(sSavedVar.strRealFilename, sSavedVar.vnOriginalSize, 'Class', sSavedVar.strClass);
+            mtVar = MappedTensor(sSavedVar.strRealFilename, cInputArgs{:});
          end
-         
+
          % - Record permutation
          mtVar.vnDimensionOrder = sSavedVar.vnDimensionOrder;
-         
+
          % - Send a warning about poorly-supported loading
          warning('MappedTensor:UnsupportedObjectStorage', ...
             '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
