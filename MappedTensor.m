@@ -340,7 +340,7 @@ classdef MappedTensor < handle
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
-            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.strRealFilename);
+            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename);
          else
             mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.strRealFilename, mtVar.strMachineFormat);
          end
