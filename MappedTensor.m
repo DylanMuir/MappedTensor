@@ -342,7 +342,7 @@ classdef MappedTensor < handle
          if (isempty(mtVar.strMachineFormat))
             [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename);
          else
-            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.strRealFilename, mtVar.strMachineFormat);
+            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename, mtVar.strMachineFormat);
          end
             
          % - Check machine format
@@ -1381,7 +1381,7 @@ classdef MappedTensor < handle
          mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
          
          % - open the file
-         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.strCmplxFilename, mtVar.strMachineFormat);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strCmplxFilename, mtVar.strMachineFormat);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
