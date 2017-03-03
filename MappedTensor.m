@@ -1327,7 +1327,14 @@ classdef MappedTensor < handle
          warning('MappedTensor:UnsupportedObjectStorage', ...
             '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
       end
+   
       
+      %% GetFilenames - METHOD Return the files that underlie this MappedTensor
+      function [strRealFilename, strCmplxFilename] = GetFilenames(mtVar)
+         % - Just return the files associated with the object
+         strRealFilename = mtVar.strRealFilename;
+         strCmplxFilename = mtVar.strCmplxFilename;
+      end
    end
       
    methods (Static)
