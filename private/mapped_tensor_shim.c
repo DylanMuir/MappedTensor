@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <errno.h>
 
-#define DEBUG
+/* #define DEBUG */
 
 /* -- MEX definitions */
 
