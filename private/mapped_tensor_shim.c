@@ -562,8 +562,9 @@ void CmdReadChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             
             /* - Skip the required number of elements */
             if (uElementIndex < (uChunkSize-1)) {
-               dprintf("mts/crc: Skipping [%llu] bytes\n", (uChunkSkip-1) * (uint64_t) nDataElemSize);
-               uSeekPos = uChunkStart + (uChunkSkip-1) * (uint64_t) nDataElemSize;
+               uSeekPos = uChunkStart + (uElementIndex+1) * uChunkSkip * (uint64_t) nDataElemSize;
+               dprintf("mts/crc: Skipping [%llu] bytes. New position: [%llu]\n", 
+                       uChunkSkip * (uint64_t) nDataElemSize, uSeekPos);
                setFilePos(hFile, (fpos_T *) &uSeekPos);
                /* - fseek(hFile, (uChunkSkip-1) * (uint64_t) nDataElemSize, SEEK_CUR); */
             }
@@ -855,11 +856,13 @@ void CmdWriteChunks(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
             }
             
             /* - Skip the required number of elements (one was already skipped due to the write above) */
-            uSeekPos = uChunkStart + (uChunkSkip-1) * (uint64_t) nDataElemSize;
+            uSeekPos = uChunkStart + (uChunkElemIndex+1) * uChunkSkip * (uint64_t) nDataElemSize;
+				dprintf("mts/cwc: Skip-write chunk: Skipping [%llu] bytes. New position: [%llu]\n",
+                    uChunkSkip * nDataElemSize, uSeekPos);
+
             setFilePos(hFile, (fpos_T*) &uSeekPos);
             /* fseek(hFile, (uChunkSkip-1) * nDataElemSize, SEEK_CUR); */
 				
-				dprintf("mts/cwc: Skip-write chunk: Skipping over [%llu] bytes\n", (uChunkSkip-1) * nDataElemSize);
          }
       }
    }
