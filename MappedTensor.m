@@ -265,7 +265,7 @@ classdef MappedTensor < handle
                         mtVar = MappedTensor(size(tfSourceTensor), varargin{:}, 'Like', tfSourceTensor);
                         
                         % - Copy the data
-                        subsasgn(mtVar, substruct('()', {':'}), tfSourceTensor);
+                        mtVar = subsasgn(mtVar, substruct('()', {':'}), tfSourceTensor);
                         return;
                      end
                      
@@ -1659,13 +1659,13 @@ function [tfResult, tnIndices] = compare_dual_tensor(oVarA, oVarB, nDim, fhCompa
       
       % - Perform the comparison and record the result
       tfThisResult = fhCompare(tfThisSlice, oCompare);
-      subsasgn(tfResult, sSubs, tfThisResult);
+      tfResult = subsasgn(tfResult, sSubs, tfThisResult);
       
       % - Record indices for this slice
       tbAResult = tfThisSlice == tfThisResult;
       tnTheseIndices(tbAResult) = nTensorAInd;
       tnTheseIndices(~tbAResult) = nTensorBInd;
-      subsasgn(tnIndices, sSubs, tnTheseIndices);
+      tnIndices = subsasgn(tnIndices, sSubs, tnTheseIndices);
    end
 end
 
