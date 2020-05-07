@@ -22,8 +22,9 @@
 %           mtVariable = MappedTensor(..., 'Class', strClassName)
 %           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
 %           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
-%           mtVariable = MappedTensor(tExistingTensor, 'Convert')
+%           mtVariable = MappedTensor(..., tExistingTensor, 'Convert')
 %           mtVariable = MappedTensor(..., 'Like', tExistingTensor)
+%           mtVariable = MappedTensor(..., 'TempDir', dirname)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -56,9 +57,14 @@
 % same class and complexity (i.e. real or complex) of 'tExistingTensor'.
 % Note that sparse MappedTensors are not supported.
 %
-% Usage: size(mtVariable)
+% The optional argument 'TempDir' allows you to specify the location of attached
+% data files (e.g. in /tmp or TEMPDIR).
+%
+% Usage: 
+%        mtVariable = MappedTensor(rand(100,100,100), 'Convert')
+%        size(mtVariable)
 %        mtVariable(:) = rand(100, 100, 100);
-%        mfData = mtVariable(:, :, 34, 2);
+%        mfData = mtVariable(:, 34, 2); % a slice (Matlab array)
 %        mtVariable(12) = 1+6i;
 %
 % Note: mtVariable = rand(100, 100, 100); would over-write the mapped tensor
@@ -77,7 +83,7 @@
 % Unary plus (+A) and minus (-A) are supported.  Binary plus (A+B) and
 % minus (A-B) are not supported, since they require a full load of the
 % tensor to implement. Perform addition or subtraction on a referenced
-% portion of the tensor, or use SliceFunction to perform the operation.
+% portion of the tensor, or use slicefun to perform the operation.
 % Multiplication using times (A*B, A.*B) is supported as long as one of A
 % or B is a scalar.  Divide (A/B, A./B, B\A, B.\A) is supported, as long as
 % B is a scalar.
@@ -99,10 +105,10 @@
 % the entire tensor into memory.
 %
 % Convenience functions:
-%    SliceFunction: Execute a function on the entire tensor, by slicing it along
+%    slicefun: Execute a function on the entire tensor, by slicing it along
 %       a specified dimension, and store the results back in the tensor.  
 %
-%       Usage: [<mtNewVar>] = SliceFunction(mtVar, fhFunctionHandle, nSliceDim <, vnSliceSize,> ...)
+%       Usage: [<mtNewVar>] = slicefun(mtVar, fhFunctionHandle, nSliceDim <, vnSliceSize,> ...)
 %
 %           'mtVar' is a MappedTensor.  This tensor will be sliced up along
 %           dimensions 'nSliceDim', with each slice passed individually to
@@ -112,17 +118,19 @@
 %           supplied, a new MappedTensor will be created to contain the
 %           results.  The optional argument 'vnSliceSize' can be used to
 %           call a function that returns a different sized output than the
-%           size of a single slice of 'mtVar'. In that case, a new tensorsl
+%           size of a single slice of 'mtVar'. In that case, a new tensor
 %           'mtNewVar' will be generated, and it will have the size
 %           'vnSliceSize', with the dimension 'nSliceDim' having the same
 %           length as in the original tensor 'mtVar'.
+%
+%           The major advantage of slicefun is a reduced memory usage.
 %
 %           "Slice assign" operations can be performed by passing in a function
 %           that takes no input arguments for 'fhFunctionHandle'.
 %
 %           Note that due to Matlab not making available the number of
 %           return arguments that an anonymous function delivers, all
-%           functions passed to SliceFunction must return AT LEAST ONE
+%           functions passed to slicefun must return AT LEAST ONE
 %           argument.
 %
 %       For example:
@@ -131,30 +139,33 @@
 %
 %          is equivalent to
 %
-%       SliceFunction(mtVar, @(x)(abs(fft2(x)), 3);
+%       slicefun(mtVar, @(x)(abs(fft2(x)), 3);
 %
 %       Each slice of the third dimension of mtVar, taken in turn, is passed to
 %       fft2 and the result stored back into the same slice of mtVar.
 %
-%       mtVar2 = SliceFunction(mtVar, @(x)(fft2(x)), 3);
+%       mtVar2 = slicefun(mtVar, @(x)(fft2(x)), 3);
 %
 %       This will return the result in a new MappedTensor, with temporary
 %       storage.
 %
-%       mtVar2 = SliceFunction(mtVar, @(x)(sum(x)), 3, [1 10 1]);
+%       mtVar2 = slicefun(mtVar, @(x)(sum(x)), 3, [1 10 1]);
 %
 %       This will create a new MappedTensor with size [1 10 N], where 'N' is
 %       the length along dimension 3 of 'mtVar'.
 %
-%       SliceFunction(mtVar, @()(randn(10, 10)), 3);
+%       slicefun(mtVar, @()(randn(10, 10)), 3);
 %
 %       This will assign random numbers to each slice of 'mtVar' independently.
 %
-%       SliceFunction(mtVar, @(x, n)(x .* vfFactor(n)), 3);
+%       slicefun(mtVar, @(x, n)(x .* vfFactor(n)), 3);
 %
 %       The second argument to the function is passed the index of the
 %       current slice.  This line will multiply each slice in mtVar by a
 %       scalar corresponding to that slice index.
+%
+%    fileparts: get the mapped filename (real and complex parts).
+%       [file_real, file_imag] = fileparts(mtVar);
 %
 % Note: MappedTensor provides an accelerated MEX function for performing
 % file reads and writes.  MappedTensor will attempt to compile this
@@ -172,6 +183,7 @@ classdef MappedTensor < handle
    properties (SetAccess = private, GetAccess = public)
       strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
+      strTempDir;             % Temporary directory used for data files on disk
       bReadOnly = false;      % Should the data be protected from writing?
       hRealContent;           % File handle for data (real part)
       hCmplxContent;          % File handle for data (complex part)
@@ -198,8 +210,9 @@ classdef MappedTensor < handle
    methods
       %% MappedTensor - CONSTRUCTOR
       function [mtVar] = MappedTensor(varargin)
+      % MAPPEDTENSOR Build an array mapped onto a file.
 
-         % - Get a handle to the appropriate shim function (should be done
+         % MAPPEDTENSOR Get a handle to the appropriate shim function (should be done
          %     before any errors are thrown)
          [mtVar.hShimFunc, ...
           mtVar.hRepSumFunc, ...
@@ -207,13 +220,19 @@ classdef MappedTensor < handle
          
          % - Filter arguments for properties
          vbKeepArg = true(numel(varargin), 1);
-         nArg = 2;
+         nArg = 1;
          while (nArg <= numel(varargin))
             if (ischar(varargin{nArg}))
                switch(lower(varargin{nArg}))
                   case {'class'}
                      % - A non-default class was specified
                      mtVar.strClass = varargin{nArg+1};
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;
+                  
+                  case {'tempdir'}
+                     % - a temporary directory path
+                     mtVar.strTempDir = varargin{nArg+1};
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -237,20 +256,21 @@ classdef MappedTensor < handle
                      
                   case {'convert'}
                      % - Convert an existing tensor into a MappedTensor
-                     if (nargin > 2)
+                     if (nArg < numel(varargin))
                         error('MappedTensor:Usage', ...
-                              '*** MappedTensor: Only a single input argument is required when using ''Convert''.');
+                              '*** MappedTensor: ''Convert'' must be the last option, preceeded by a numeric array.');
                      end
                      
+                     % - Get the Tensor value to convert
+                     tfSourceTensor = varargin{nArg-1};
+                     
                      % - Do we already have a MappedTensor?
-                     if (isa(varargin{1}, 'MappedTensor'))
+                     if (isa(tfSourceTensor, 'MappedTensor'))
                         % - Just return it
-                        mtVar = varargin{1};
+                        mtVar = tfSourceTensor;
                         return;
                         
                      else
-                        % - Get the
-                        tfSourceTensor = varargin{1};
 
                         % - Check the size of the incoming tensor
                         if (numel(tfSourceTensor) == 0)
@@ -259,7 +279,7 @@ classdef MappedTensor < handle
                         end
                         
                         % - Remove 'Convert' arguments from varargin
-                        varargin([1 nArg]) = [];
+                        varargin([nArg-1 nArg]) = [];
                         
                         % - Create a MappedTensor
                         mtVar = MappedTensor(size(tfSourceTensor), varargin{:}, 'Like', tfSourceTensor);
@@ -283,8 +303,10 @@ classdef MappedTensor < handle
                      
                   otherwise
                      % - No other properties are supported
+                     if nArg > 1
                      error('MappedTensor:InvalidProperty', ...
                         '*** MappedTensor: ''%s'' is not a valid property.', varargin{nArg});
+                      end
                end
             end
             
@@ -307,7 +329,7 @@ classdef MappedTensor < handle
          mtVar.bMustCast = ~isequal(mtVar.strStorageClass, mtVar.strClass);
          
          % - Should we map a file on disk, or create a temporary file?
-         if (ischar(varargin{1}))
+         if (ischar(varargin{1})) && ~isempty(dir(varargin{1})) && ~isdir(varargin{1})
             % - Open an existing file
             vnTensorSize = double([varargin{2:end}]);
             mtVar.strRealFilename = varargin{1};
@@ -335,7 +357,7 @@ classdef MappedTensor < handle
 
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
-            mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes);
+            mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes, mtVar.strTempDir);
          end
          
          % - Open the file
@@ -380,7 +402,7 @@ classdef MappedTensor < handle
       
       % delete - DESTRUCTOR
       function delete(mtVar)
-         % - Delete the file, if a temporary file was created for this variable
+         % DELETE Delete the file, if a temporary file was created for this variable
          try
             % - Close the file handles
             mtVar.hShimFunc('close', mtVar.hRealContent);
@@ -412,7 +434,7 @@ classdef MappedTensor < handle
       
       %% Overloaded subsref, subsasgn and end
       function [varargout] = subsref(mtVar, subs)
-         % - More than one return argument means cell or dot referencing was
+         % SUBSREF More than one return argument means cell or dot referencing was
          % used
          if (nargout > 1)
             error('MappedTensor:InvalidReferencing', ...
@@ -437,128 +459,13 @@ classdef MappedTensor < handle
          end
       end
       
-      % my_subsref - Standard array referencing
-      function [tfData] = my_subsref(mtVar, S)
-         % - Test for valid subscripts
-         cellfun(@isvalidsubscript, S.subs);
-         
-         % - Re-order reference indices
-         nNumDims = numel(S.subs);
-         nNumTotalDims = numel(mtVar.vnDimensionOrder);
-         vnReferencedTensorSize = size(mtVar);
-         
-         % - Catch "read entire stack" condition
-         if (~all(cellfun(@iscolon, S.subs)))
-            % - Handle different numbers of referencing dimensions
-            if (nNumDims == 1)
-               % - Translate from linear refs to indices
-               nNumDims = nNumTotalDims;
-               
-               % - Translate colon indexing
-               if (iscolon(S.subs{1}))
-                  S.subs{1} = (1:numel(mtVar))';
-               end
-               
-               % - Get equivalent subscripted indexes
-               [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
-               
-               % - Permute indices and convert back to linear indexing
-               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-               
-               try
-                  S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
-               catch
-                  error('MappedTensor:badsubscript', ...
-                     '*** MappedTensor: Subscript out of range.');
-               end
-               
-            elseif (nNumDims < nNumTotalDims)
-               % - Wrap up trailing dimensions, matlab style, using linear indexing
-               vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
-               vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
-               
-               % - Inverse permute index order
-               vnInvOrder(mtVar.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
-               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder(vnInvOrder ~= 0));
-               S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
-               
-            elseif (nNumDims == nNumTotalDims)
-               % - Simply permute and access tensor
-               
-               % - Permute index order
-               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-               S.subs = S.subs(vnInvOrder);
-               
-            else % (nNumDims > nNumTotalDims)
-               % - Check for non-colon references
-               vbNonColon = ~cellfun(@iscolon, S.subs);
-               
-               % - Check only trailing dimensions
-               vbNonColon(1:nNumTotalDims) = false;
-               
-               % - Check trailing dimensions for non-'1' indices
-               if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
-                  % - This is an error
-                  error('MappedTensor:badsubscript', ...
-                     '*** MappedTensor: Subscript out of range.');
-               end
-               
-               % - Permute index order
-               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
-               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
-               S.subs = S.subs(vnInvOrder);
-            end
-         end
-         
-         % - Reference the tensor data element
-         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-         
-         if (mtVar.bIsComplex)
-            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-         end
-            
-         % - Cast data, if required
-         if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
-            
-            if (mtVar.bIsComplex)
-               tfImagData = cast(tfImagData, mtVar.strClass);
-            end
-         end
-         
-         % - Apply scaling factors
-         if (mtVar.bIsComplex)
-            tfData = complex(mtVar.fRealFactor .* tfData, ...
-                             mtVar.fComplexFactor .* tfImagData);
-         else
-            tfData = mtVar.fRealFactor .* tfData;
-         end
-         
-         % - Recast data, if required, to take into account scaling which
-         % can occur in another class
-         if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
-         end
-         
-         % - Permute dimensions
-         tfData = permute(tfData, mtVar.vnDimensionOrder);
-         
-         % - Reshape return data to concatenate trailing dimensions (just as
-         % matlab does)
-         if (nNumDims == 1)
-            tfData = reshape(tfData, [], 1);
-            
-         elseif (nNumDims < nNumTotalDims)
-            cnSize = num2cell(size(tfData));
-            tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
-         end
-      end
+    
       
       % subsasgn - METHOD Overloaded subsasgn
       function [mtVar] = subsasgn(mtVar, S, tfData)
-         % - Test for valid subscripts
+         % SUBSASGN Subscripted assignment
+         
+         % Test for valid subscripts
          cellfun(@isvalidsubscript, S.subs);
 
          % - Test read-only status if tensor
@@ -601,6 +508,7 @@ classdef MappedTensor < handle
       
       % end - METHOD Overloaded end
       function ind = end(obj,k,n)
+      % END Last index in an indexing expression
          szd = size(obj);
          if k < n
             ind = szd(k);
@@ -612,7 +520,7 @@ classdef MappedTensor < handle
       %% Overloaded methods (size, numel, ndims, length, permute, ipermute, ctranspose, transpose, isreal)
       % size - METHOD Overloaded size function
       function [varargout] = size(mtVar, vnDimensions)
-         % - Get original tensor size, and extend dimensions if necessary
+         % SIZE Get original tensor size, and extend dimensions if necessary
          vnOriginalSize = mtVar.vnOriginalSize; %#ok<PROP>
          vnOriginalSize(end+1:numel(mtVar.vnDimensionOrder)) = 1; %#ok<PROP>
          
@@ -656,6 +564,8 @@ classdef MappedTensor < handle
       
       % ndims - METHOD Overloaded ndims function
       function [nDim] = ndims(mtVar, varargin)
+      % NDIMS   Number of dimensions.
+      
           % - If varargin contains anything, a cell reference "{}" was attempted
           if (~isempty(varargin))
               error('MappedTensor:cellRefFromNonCell', ...
@@ -668,6 +578,8 @@ classdef MappedTensor < handle
       
       % numel - METHOD Overloaded numel function
       function [nNumElem] = numel(mtVar, varargin)
+      % NUMEL Number of elements in an array
+      
          % - If varargin contains anything, a cell reference "{}" was attempted
          if (~isempty(varargin))
             error('MappedTensor:cellRefFromNonCell', ...
@@ -680,11 +592,13 @@ classdef MappedTensor < handle
       
       % length - METHOD Overloaded length function
       function [nLength] = length(mtVar)
+      % LENGTH   Length of vector.
          nLength = max(size(mtVar));
       end
       
       % permute - METHOD Overloaded permute function
       function [mtVar] = permute(mtVar, vnNewOrder)
+      % PERMUTE Permute array dimensions
          vnCurrentOrder = mtVar.vnDimensionOrder;
          
          if (numel(vnNewOrder) > numel(vnCurrentOrder))
@@ -696,12 +610,15 @@ classdef MappedTensor < handle
       
       % ipermute - METHOD Overloaded ipermute function
       function [mtVar] = ipermute(mtVar, vnOldOrder)
+      % IPERMUTE Inverse permute array dimensions.
          vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
          mtVar = permute(mtVar, vnNewOrder);
       end
       
       % ctranspose - METHOD Overloaded ctranspose function
       function [mtVar] = ctranspose(mtVar)
+      % '   Complex conjugate transpose.
+      
          % - Array-transpose real and complex parts
          mtVar = transpose(mtVar);
          
@@ -713,51 +630,61 @@ classdef MappedTensor < handle
       
       % transpose - METHOD Overloaded transpose function
       function [mtVar] = transpose(mtVar)
+      % .' Transpose.
          mtVar = permute(mtVar, [2 1]);
       end
       
       % isreal - METHOD Overloaded isreal function
       function [bIsReal] = isreal(mtVar)
+      % ISREAL True for real array.
          bIsReal = ~mtVar.bIsComplex;
       end
       
       % islogical - METHOD Overloaded islogical function
       function [bIsLogical] = islogical(mtVar)
+      % ISLOGICAL True for logical array.
          bIsLogical = isequal(mtVar.strClass, 'logical');
       end
       
       % isnumeric - METHOD Overloaded isnumeric function
       function [bIsNumeric] = isnumeric(mtVar)
+      % ISNUMERIC True for numeric arrays.
          bIsNumeric = ~islogical(mtVar) && ~ischar(mtVar);
       end
       
       % isscalar - METHOD Overloaded isscalar function
       function [bIsScalar] = isscalar(mtVar)
+      % ISSCALAR True if array is a scalar.
          bIsScalar = numel(mtVar) == 1;
       end
       
       % ismatrix - METHOD Overloaded ismatrix function
       function [bIsMatrix] = ismatrix(mtVar)
+      % ISMATRIX True if array is a matrix (not a scalar).
          bIsMatrix = ~isscalar(mtVar);
       end
       
       % ischar - METHOD Overloaded ischar function
       function [bIsChar] = ischar(mtVar)
+      % ISCHAR  True for character array (string).
          bIsChar = isequal(mtVar.strClass, 'char');
       end
       
       % isnan - METHOD Overloaded isnan function
       function [tbIsNan] = isnan(mtVar)
+      % ISNAN  True for Not-a-Number.
          tbIsNan = reshape(isnan(mtVar(:)), size(mtVar));
       end
       
       % isfloat - METHOD Overloaded isfloat function
       function [bIsFloat] = isfloat(mtVar)
+      % ISFLOAT True for floating point arrays, both single and double.
          bIsFloat = isequal(mtVar.strClass, 'single') || isequal(mtVar.strClass, 'double');
       end
       
       % isinteger - METHOD Overloaded isinteger function
       function [bIsInteger] = isinteger(mtVar)
+      % ISINTEGER True for arrays of integer data type.
          bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
       end
       
@@ -772,6 +699,8 @@ classdef MappedTensor < handle
       
       % uminus - METHOD Overloaded uminus operator (-mtVar)
       function [mtVar] = uminus(mtVar)
+      % -  Unary minus.
+      
          % - Negate real part
          mtVar.fRealFactor = -mtVar.fRealFactor;
          
@@ -783,11 +712,14 @@ classdef MappedTensor < handle
       
       % uplus - METHOD Overloaded uplus operator (+mtVar)
       function [mtVar] = uplus(mtVar)
+      % +  Unary plus.
          % - ...nothing to do?
       end
       
       % times - METHOD Overloaded times operator (A.*B)
       function [mtVar] = times(varargin)
+      % .*  Array multiply (only with a scalar).
+      
          % - Are the inputs numeric?
          vbIsNumeric = cellfun(@isnumeric, varargin);
          
@@ -817,12 +749,16 @@ classdef MappedTensor < handle
       
       % mtimes - METHOD Overloaded mtimes operator (A*B)
       function [mtVar] = mtimes(varargin)
+      % *   Matrix multiply (only with a scalar).
+      
          % - Use 'times' to perform the (scalar) multiplicaton
          mtVar = times(varargin{:});
       end
       
       % rdivide - METHOD Overloaded rdivide operator (A./B)
       function [mtVar] = rdivide(mtVar, fScalar)
+      % ./  Right array divide (only with a scalar).
+      
          % - Check that the right operand is a scalar
          if (~isnumeric(fScalar) || ~isscalar(fScalar))
             error('MappedTensor:InvalidRDivideOperands', ...
@@ -835,6 +771,8 @@ classdef MappedTensor < handle
       
       % ldivide - METHOD Overloaded ldivide operator (A.\B)
       function [mtVar] = ldivide(fScalar, mtVar)
+      % .\  Left array divide (only with a scalar).
+      
          % - Check that the left operand is a scalar
          if (~isnumeric(fScalar) || ~isscalar(fScalar))
             error('MappedTensor:InvalidLDivideOperands', ...
@@ -847,12 +785,16 @@ classdef MappedTensor < handle
       
       % mrdivide - METHOD Overloaded mrdivide operator (A/B)
       function [mtVar] = mrdivide(varargin)
+      % /   Slash or right matrix divide (only with a scalar).
+      
          % - Use 'rdivide' to perform the operation
          mtVar = rdivide(varargin{:});
       end
       
       % mldivide - METHOD Overloaded mldivide operator (A\B)
       function [mtVar] = mldivide(varargin)
+      % \   Backslash or left matrix divide (only with a scalar).
+      
          % - Use 'ldivide' to perform the operation
          mtVar = ldivide(varargin{:});
       end
@@ -861,18 +803,21 @@ classdef MappedTensor < handle
       
       % plus - METHOD Overloaded binary 'plus' operator (A+B)
       function [varargout] = plus(varargin) %#ok<STOUT>
+      % +   Plus.
          error('MappedTensor:NotImplemented', ...
-            '*** MappedTensor: ''plus'' (A+B) must be performed on a referenced portion of the tensor, or else explicitly with ''SliceFunction''.');
+            '*** MappedTensor: ''plus'' (A+B) must be performed on a referenced portion of the tensor, or else explicitly with ''slicefun''.');
       end
       
       % minus - METHOD Overloaded binary 'minus' operator (A-B)
       function [varargout] = minus(varargin) %#ok<STOUT>
+      % -   Minus
          error('MappedTensor:NotImplemented', ...
-            '*** MappedTensor: ''minus'' (A-B) must be performed on a referenced portion of the tensor, or else explicitly with ''SliceFunction''.');
+            '*** MappedTensor: ''minus'' (A-B) must be performed on a referenced portion of the tensor, or else explicitly with ''slicefun''.');
       end
       
-      %% disp - METHOD Overloaded disp function
-      function disp(mtVar)
+      %% display - METHOD Overloaded disp function
+      function display(mtVar)
+      % DISPLAY Display array (short).
          strSize = strtrim(sprintf(' %d', size(mtVar)));
          
          if (mtVar.bIsComplex)
@@ -882,26 +827,51 @@ classdef MappedTensor < handle
          end
          
          disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> object, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
+      end
+      
+      %% disp - METHOD Overloaded display function
+      function disp(mtVar)
+      % DISPLAY Display array (long).
+         strSize = strtrim(sprintf(' %d', size(mtVar)));
+         
+         if (mtVar.bIsComplex)
+            strComplex = 'complex ';
+         else
+            strComplex = '';
+         end
+         
+         disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> object, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
+         disp([ '    File: ' mtVar.strRealFilename ' ' mtVar.strCmplxFilename ]);
+         n = mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes;
+         if mtVar.bIsComplex, n=n*2; end
+         disp([ '    Size: ' num2str(n) ]);
+         if mtVar.bReadOnly
+           disp('    ReadOnly: yes')
+         end
          disp('  <a href="matlab:methods(''MappedTensor'')">Methods</a>');
-         fprintf(1, '\n');
       end
       
       %% horzcat, vertcat, cat - METHOD Overloaded concatenation functions (unsupported)
       function out = horzcat(varargin) %#ok<STOUT,VANUS>
+      % HORZCAT Horizontal concatenation.
          error('MappedTensor:UnsupportedConcatenation', ...
             '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
       end
       function out = vertcat(varargin) %#ok<VANUS,STOUT>
+      % VERTCAT Vertical concatenation.
          error('MappedTensor:UnsupportedConcatenation', ...
             '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
       end
       function out = cat(varargin) %#ok<VANUS,STOUT>
+      % CAT Concatenate arrays.
          error('MappedTensor:UnsupportedConcatenation', ...
             '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
       end      
    
       %% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim, outtype>)"
       function [tFinalSum] = sum(mtVar, varargin)
+      % SUM Sum of elements.
+      
          % - Get tensor size
          vnTensorSize = size(mtVar);
          
@@ -1041,6 +1011,8 @@ classdef MappedTensor < handle
       
       % max - METHOD Overloaded max function for usage "max(mtVar, ...)"
       function [tfMax, tnMaxIndices] = max(mtVar, varargin)
+      % MAX    Largest component.
+      
          % - Check arguments
          if (nargin > 3)
             error('MappedTensor:max:InvalidArguments', ...
@@ -1070,6 +1042,8 @@ classdef MappedTensor < handle
       
       % min - METHOD Overloaded max function for usage "min(mtVar, ...)"
       function [tfMax, tnMaxIndices] = min(mtVar, varargin)
+      % MIN    Smallest component.
+      
          % - Check arguments
          if (nargin > 3)
             error('MappedTensor:min:InvalidArguments', ...
@@ -1097,11 +1071,11 @@ classdef MappedTensor < handle
          end
       end
       
-      %% SliceFunction - METHOD Execute a function on the entire tensor, in slices
-      function [mtNewVar] = SliceFunction(mtVar, fhFunction, nSliceDim, vnSliceSize, bWriteOnly, varargin)
-         % SliceFunction - METHOD Execute a function on the entire tensor, in slices
+      %% slicefun - METHOD Execute a function on the entire tensor, in slices
+      function [mtNewVar] = slicefun(mtVar, fhFunction, nSliceDim, vnSliceSize, bWriteOnly, varargin)
+         % SLICEFUN Execute a function on the entire tensor, in slices.
          %
-         % Usage: [<mtNewVar>] = SliceFunction(mtVar,
+         % Usage: [<mtNewVar>] = slicefun(mtVar,
          %           fhFunctionHandle, nSliceDim <, vnSliceSize, bWriteOnly,> ...)
          %
          % 'mtVar' is a MappedTensor.  This tensor will be sliced up along
@@ -1117,12 +1091,14 @@ classdef MappedTensor < handle
          % 'vnSliceSize', with the dimension 'nSliceDim' having the same
          % length as in the original tensor 'mtVar'.
          %
+         % The major advantage of slicefun is a reduced memory usage.
+         %
          % "Slice assign" operations can be performed by passing in a
          % function that takes no input arguments for 'fhFunctionHandle'.
          %
          % Note that due to Matlab not making available the number of
          % return arguments that an anonymous function delivers, all
-         % functions passed to SliceFunction must return AT LEAST ONE
+         % functions passed to slicefun must return AT LEAST ONE
          % argument.
          %
          % For example:
@@ -1131,28 +1107,28 @@ classdef MappedTensor < handle
          %
          % is equivalent to
          %
-         %    SliceFunction(mtVar, @(x)(abs(fft2(x)), 3);
+         %    slicefun(mtVar, @(x)(abs(fft2(x)), 3);
          %
          % Each slice of the third dimension of mtVar, taken in turn, is
          % passed to fft2 and the result stored back into the same slice of
          % mtVar.
          %
-         %    mtVar2 = SliceFunction(mtVar, @(x)(fft2(x)), 3);
+         %    mtVar2 = slicefun(mtVar, @(x)(fft2(x)), 3);
          %
          % This will return the result in a new MappedTensor, with
          % temporary storage.
          %
-         %    mtVar2 = SliceFunction(mtVar, @(x)(sum(x)), 3, [1 10 1]);
+         %    mtVar2 = slicefun(mtVar, @(x)(sum(x)), 3, [1 10 1]);
          %
          % This will create a new MappedTensor with size [1 10 N], where
          % 'N' is the length along dimension 3 of 'mtVar'.
          %
-         %    SliceFunction(mtVar, @()(randn(10, 10)), 3);
+         %    slicefun(mtVar, @()(randn(10, 10)), 3);
          %
          % This will assign random numbers to each slice of 'mtVar'
          % independently.
          %
-         %    SliceFunction(mtVar, @(x, n)(x .* vfFactor(n)), 3);
+         %    slicefun(mtVar, @(x, n)(x .* vfFactor(n)), 3);
          %
          % The second argument to the function is passed the index of the
          % current slice.  This line will multiply each slice in mtVar by a
@@ -1163,6 +1139,10 @@ classdef MappedTensor < handle
          
          % - Shall we generate a new tensor?
          bNewTensor = false;
+         
+         if nargin < 3,
+           [~,nSliceDim] = max(vnTensorSize);
+         end
          
          % - Check slice dimension
          if ((nSliceDim < 1) || (nSliceDim > numel(vnTensorSize)))
@@ -1184,7 +1164,7 @@ classdef MappedTensor < handle
             % lost
             if (nargout == 0)
                warning('MappedTensor:LostSliceOutput', ...
-                  '--- MappedTensor: Warning: The output of a SliceFunction command is likely to be thrown away...');
+                  '--- MappedTensor: Warning: The output of a slicefun command is likely to be thrown away...');
             end
          end
          
@@ -1217,7 +1197,7 @@ classdef MappedTensor < handle
             % - Are we attempting to re-size the tensor?
             if (~isequal(vnSliceSize([1:nSliceDim-1 nSliceDim+1:end]), vnTensorSize([1:nSliceDim-1 nSliceDim+1:end])))
                error('MappedTensor:IncorrectSliceDimensions', ...
-                  '*** MappedTensor/SliceFunction: A tensor cannot resized during a slice operation.\n       Assign the output to a new tensor.');
+                  '*** MappedTensor/slicefun: A tensor cannot resized during a slice operation.\n       Assign the output to a new tensor.');
             end
          end
          
@@ -1253,7 +1233,7 @@ classdef MappedTensor < handle
          end
          
          % - Slice up along specified dimension
-         fprintf(1, '--- MappedTensor/SliceFunction: [%6.2f%%]', 0);
+         fprintf(1, '--- MappedTensor/slicefun: [%6.2f%%]', 0);
          for (nIndex = 1:vnTensorSize(nSliceDim))
             % - Get chunks for this indexing window
             mnTheseSourceChunks = bsxfun(@plus, mnSourceChunkIndices, [(nIndex-1) * nSourceWindowStep 0 0]);
@@ -1314,6 +1294,8 @@ classdef MappedTensor < handle
       
       %% saveobj - METHOD Overloaded save mechanism
       function [sVar] = saveobj(mtVar)
+      % SAVEOBJ Save filter for objects.
+      
          % - Generate a structure containing the pertinent properties
          sVar.strRealFilename = mtVar.strRealFilename;
          sVar.bTemporary = mtVar.bTemporary;
@@ -1329,9 +1311,9 @@ classdef MappedTensor < handle
       end
    
       
-      %% GetFilenames - METHOD Return the files that underlie this MappedTensor
-      function [strRealFilename, strCmplxFilename] = GetFilenames(mtVar)
-         % - Just return the files associated with the object
+      %% fileparts - METHOD Return the files that underlie this MappedTensor
+      function [strRealFilename, strCmplxFilename] = fileparts(mtVar)
+         % FILEPARTS Return the files associated with the data
          strRealFilename = mtVar.strRealFilename;
          strCmplxFilename = mtVar.strCmplxFilename;
       end
@@ -1340,6 +1322,8 @@ classdef MappedTensor < handle
    methods (Static)
       %% loadobj - METHOD Overloaded load mechanism
       function [mtVar] = loadobj(sSavedVar)
+      % LOADOBJ Load filter for objects.
+      
          % - Put back together arguments used to load the tensor
          cInputArgs = { ...
              sSavedVar.vnOriginalSize, ...
@@ -1385,7 +1369,7 @@ classdef MappedTensor < handle
          end
          
          % - make enough space for a tensor
-         mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes);
+         mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes, mtVar.strTempDir);
          
          % - open the file
          mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strCmplxFilename, mtVar.strMachineFormat);
@@ -1454,6 +1438,8 @@ classdef MappedTensor < handle
       %
       % The optional parameter 'bForce' 
       function tfData = cast(mtVar, strClass, bForce)
+      % CAST  Cast a variable to a different data type or class.
+      
          % - Should we really cast the entire tensor?
          if (~exist('bForce', 'var') || isempty(bForce))
             bForce = false;
@@ -1484,13 +1470,25 @@ classdef MappedTensor < handle
          end
       end
    end
-end
+end % end classdef MappedTensor
 
-%% --- Helper functions ---
+%% --- Helper functions --------------------------------------------------------
 
-function strFilename = create_temp_file(nNumEntries)
+
+
+
+
+
+
+
+
+function strFilename = create_temp_file(nNumEntries, d)
    % - Get the name of a temporary file
-   strFilename = tempname;
+   if nargin < 2 || isempty(d)
+     strFilename = tempname;
+   else
+   	 strFilename = tempname(d);
+   end
    
     % - Attempt fast allocation on some platforms
     if (ispc)
@@ -2152,10 +2150,12 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
          strCWD = cd(fullfile(strMTDir, 'private'));
          
          % - Try to compile the MEX functions
-         disp('--- MappedTensor: Compiling MEX functions.');
-         mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
-         mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
-         mex('mapped_tensor_chunklength.c', '-largeArrayDims', '-O');
+         disp([ '--- MappedTensor: Compiling MEX functions in ' fullfile(strMTDir, 'private') ]);
+         try
+		       mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
+		       mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
+		       mex('mapped_tensor_chunklength.c', '-largeArrayDims', '-O');
+		     end
          
          % - Move back to previous working directory
          cd(strCWD);
@@ -2178,5 +2178,124 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
       hChunkLengthFunc = @mapped_tensor_chunklength_nomex;
    end
 end
+
+% my_subsref - Standard array referencing
+      function [tfData] = my_subsref(mtVar, S)
+         % - Test for valid subscripts
+         cellfun(@isvalidsubscript, S.subs);
+         
+         % - Re-order reference indices
+         nNumDims = numel(S.subs);
+         nNumTotalDims = numel(mtVar.vnDimensionOrder);
+         vnReferencedTensorSize = size(mtVar);
+         
+         % - Catch "read entire stack" condition
+         if (~all(cellfun(@iscolon, S.subs)))
+            % - Handle different numbers of referencing dimensions
+            if (nNumDims == 1)
+               % - Translate from linear refs to indices
+               nNumDims = nNumTotalDims;
+               
+               % - Translate colon indexing
+               if (iscolon(S.subs{1}))
+                  S.subs{1} = (1:numel(mtVar))';
+               end
+               
+               % - Get equivalent subscripted indexes
+               [cIndices{1:nNumDims}] = ind2sub(vnReferencedTensorSize, S.subs{1});
+               
+               % - Permute indices and convert back to linear indexing
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               
+               try
+                  S.subs{1} = sub2ind(mtVar.vnOriginalSize, cIndices{vnInvOrder});
+               catch
+                  error('MappedTensor:badsubscript', ...
+                     '*** MappedTensor: Subscript out of range.');
+               end
+               
+            elseif (nNumDims < nNumTotalDims)
+               % - Wrap up trailing dimensions, matlab style, using linear indexing
+               vnReferencedTensorSize(nNumDims) = prod(vnReferencedTensorSize(nNumDims:end));
+               vnReferencedTensorSize = vnReferencedTensorSize(1:nNumDims);
+               
+               % - Inverse permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumDims)) = 1:nNumDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder(vnInvOrder ~= 0));
+               S.subs = S.subs(vnInvOrder(vnInvOrder ~= 0));
+               
+            elseif (nNumDims == nNumTotalDims)
+               % - Simply permute and access tensor
+               
+               % - Permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               S.subs = S.subs(vnInvOrder);
+               
+            else % (nNumDims > nNumTotalDims)
+               % - Check for non-colon references
+               vbNonColon = ~cellfun(@iscolon, S.subs);
+               
+               % - Check only trailing dimensions
+               vbNonColon(1:nNumTotalDims) = false;
+               
+               % - Check trailing dimensions for non-'1' indices
+               if (any(cellfun(@(c)(~isequal(c, 1)), S.subs(vbNonColon))))
+                  % - This is an error
+                  error('MappedTensor:badsubscript', ...
+                     '*** MappedTensor: Subscript out of range.');
+               end
+               
+               % - Permute index order
+               vnInvOrder(mtVar.vnDimensionOrder(1:nNumTotalDims)) = 1:nNumTotalDims;
+               vnReferencedTensorSize = vnReferencedTensorSize(vnInvOrder);
+               S.subs = S.subs(vnInvOrder);
+            end
+         end
+         
+         % - Reference the tensor data element
+         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         
+         if (mtVar.bIsComplex)
+            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         end
+            
+         % - Cast data, if required
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
+            
+            if (mtVar.bIsComplex)
+               tfImagData = cast(tfImagData, mtVar.strClass);
+            end
+         end
+         
+         % - Apply scaling factors
+         if (mtVar.bIsComplex)
+            tfData = complex(mtVar.fRealFactor .* tfData, ...
+                             mtVar.fComplexFactor .* tfImagData);
+         else
+            tfData = mtVar.fRealFactor .* tfData;
+         end
+         
+         % - Recast data, if required, to take into account scaling which
+         % can occur in another class
+         if (mtVar.bMustCast)
+            tfData = cast(tfData, mtVar.strClass);
+         end
+         
+         % - Permute dimensions
+         tfData = permute(tfData, mtVar.vnDimensionOrder);
+         
+         % - Reshape return data to concatenate trailing dimensions (just as
+         % matlab does)
+         if (nNumDims == 1)
+            tfData = reshape(tfData, [], 1);
+            
+         elseif (nNumDims < nNumTotalDims)
+            cnSize = num2cell(size(tfData));
+            tfData = reshape(tfData, cnSize{1:nNumDims-1}, []);
+         end
+      end
 
 % --- END of MappedTensor CLASS ---
