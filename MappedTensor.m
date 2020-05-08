@@ -19,12 +19,13 @@
 %           mtVariable = MappedTensor(nDim1, nDim2, nDim3, ...)
 %           mtVariable = MappedTensor(nSquareDim, ...)
 %           mtVariable = MappedTensor(strExistingFilename, <dimensions>, ...)
-%           mtVariable = MappedTensor(..., 'Class', strClassName)
-%           mtVariable = MappedTensor(..., 'HeaderBytes', nHeaderBytesToSkip)
+%           mtVariable = MappedTensor(..., 'Format', FormatName)
+%           mtVariable = MappedTensor(..., 'Offset', OffsetToSkip)
 %           mtVariable = MappedTensor(..., 'MachineFormat', strMachineFormat)
 %           mtVariable = MappedTensor(..., tExistingTensor, 'Convert')
 %           mtVariable = MappedTensor(..., 'Like', tExistingTensor)
 %           mtVariable = MappedTensor(..., 'TempDir', dirname)
+%           mtVariable = MappedTensor(vnTensor)
 %
 % 'vnTensorSize', or [nDim1 nDim2 nDim3 ...] defines the desired size of the
 % variable.  By default, a new binary temporary file will be generated, and
@@ -42,7 +43,7 @@
 % above). Supported classes: char, int8, uint8, logical, int16, uint16,
 % int32, uint32, single, int64, uint64, double.
 %
-% The optional parameter 'nHeaderBytesToSkip' allows you to skip over the
+% The optional parameter 'OffsetToSkip' allows you to skip over the
 % beginning of an (existing) binary file, by throwing away the specified
 % number of header bytes.
 %
@@ -179,16 +180,20 @@
 % Thanks to @marcsous (https://github.com/marcsous) for bug reports and
 % fixes.
 
-classdef MappedTensor < handle
+classdef MappedTensor < hgsetget
+  properties % public, in sync with memmapfile
+    Filename;        % Binary data file on disk (real part of tensor)
+    Format = 'double';    % The class of this mapped tensor
+    Writable = true;      % Should the data be protected from writing?
+    Offset = 0;       % The number of bytes to skip at the beginning of the file
+    Data;                   % the actual Data
+  end
    properties (SetAccess = private, GetAccess = public)
-      strRealFilename;        % Binary data file on disk (real part of tensor)
       strCmplxFilename;       % Binary data file on disk (complex part of tensor)
       strTempDir;             % Temporary directory used for data files on disk
-      bReadOnly = false;      % Should the data be protected from writing?
       hRealContent;           % File handle for data (real part)
       hCmplxContent;          % File handle for data (complex part)
       bTemporary;             % A flag which records whether a temporary file was created by MappedTensor
-      strClass = 'double';    % The class of this mapped tensor
       strStorageClass;        % The storage class of this tensor on disk
       nClassSize;             % The size of a single scalar element of the storage class, in bytes
       vnDimensionOrder;       % A vector containing the virtual dimension order used for referencing the tensor
@@ -198,7 +203,7 @@ classdef MappedTensor < handle
       bIsComplex = false;     % A boolean indicating the the data has a complex part
       fComplexFactor = 1;     % A factor multiplied by the complex part of the tensor (used for scalar multiplication and negation)
       fRealFactor = 1;        % A factor multiplied by the real part of the tensor (used for scalar multiplication and negation)
-      nHeaderBytes = 0;       % The number of bytes to skip at the beginning of the file
+
       strMachineFormat;       % The desired machine format of the mapped file
       bBigEndian;             % Should the data be stored in big-endian format?
 
@@ -224,9 +229,9 @@ classdef MappedTensor < handle
          while (nArg <= numel(varargin))
             if (ischar(varargin{nArg}))
                switch(lower(varargin{nArg}))
-                  case {'class'}
+                  case {'class','format'}
                      % - A non-default class was specified
-                     mtVar.strClass = varargin{nArg+1};
+                     mtVar.Format = varargin{nArg+1};
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                   
@@ -236,9 +241,9 @@ classdef MappedTensor < handle
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
-                  case {'headerbytes'}
+                  case {'headerbytes','offset'}
                      % - A number of header bytes was specified
-                     mtVar.nHeaderBytes = varargin{nArg+1};
+                     mtVar.Offset = varargin{nArg+1};
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
                      
@@ -250,10 +255,14 @@ classdef MappedTensor < handle
                      
                   case {'readonly'}
                      % - Read-only or read/write status was specified
-                     mtVar.bReadOnly = logical(varargin{nArg+1});
+                     mtVar.Writable = ~logical(varargin{nArg+1});
                      vbKeepArg(nArg:nArg+1) = false;
                      nArg = nArg + 1;
-                     
+                  case {'writable'}
+                     % - Read-only or read/write status was specified
+                     mtVar.Writable = logical(varargin{nArg+1});
+                     vbKeepArg(nArg:nArg+1) = false;
+                     nArg = nArg + 1;   
                   case {'convert'}
                      % - Convert an existing tensor into a MappedTensor
                      if (nArg < numel(varargin))
@@ -291,7 +300,7 @@ classdef MappedTensor < handle
                      
                   case {'like'}
                      % - Set the class property accordingly
-                     mtVar.strClass = class(varargin{nArg+1});
+                     mtVar.Format = class(varargin{nArg+1});
                      
                      % - Set the complexity (real or complex) accordingly
                      if (~isreal(varargin{nArg+1}))
@@ -323,18 +332,20 @@ classdef MappedTensor < handle
          end
          
          % - Get class information
-         [mtVar.nClassSize, mtVar.strStorageClass] = ClassSize(mtVar.strClass);
+         [mtVar.nClassSize, mtVar.strStorageClass] = ClassSize(mtVar.Format);
          
          % - Do we need to cast data between these two classes?
-         mtVar.bMustCast = ~isequal(mtVar.strStorageClass, mtVar.strClass);
+         mtVar.bMustCast = ~isequal(mtVar.strStorageClass, mtVar.Format);
          
          % - Should we map a file on disk, or create a temporary file?
          if (ischar(varargin{1})) && ~isempty(dir(varargin{1})) && ~isdir(varargin{1})
             % - Open an existing file
             vnTensorSize = double([varargin{2:end}]);
-            mtVar.strRealFilename = varargin{1};
+            mtVar.Filename = varargin{1};
             mtVar.bTemporary = false;
-            
+         elseif numel(varargin) == 1 && isnumeric(varargin{1}) && all(size(varargin{1})>1)
+           mtVar = MappedTensor(varargin{1},'Convert');
+           return
          else
             % - Create a temporary file
             mtVar.bTemporary = true;
@@ -357,14 +368,14 @@ classdef MappedTensor < handle
 
          % - Make enough space for a temporary tensor
          if (mtVar.bTemporary)
-            mtVar.strRealFilename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.nHeaderBytes, mtVar.strTempDir);
+            mtVar.Filename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
          end
          
          % - Open the file
          if (isempty(mtVar.strMachineFormat))
-            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename);
+            [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename);
          else
-            mtVar.hRealContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strRealFilename, mtVar.strMachineFormat);
+            mtVar.hRealContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename, mtVar.strMachineFormat);
          end
             
          % - Check machine format
@@ -414,7 +425,7 @@ classdef MappedTensor < handle
             if (mtVar.bTemporary)
                % - Really delete the temporary file, don't just put it in the trash
                strState = recycle('off');
-               delete(mtVar.strRealFilename);
+               delete(mtVar.Filename);
                recycle(strState);
             end
             
@@ -433,33 +444,23 @@ classdef MappedTensor < handle
       end
       
       %% Overloaded subsref, subsasgn and end
-      function [varargout] = subsref(mtVar, subs)
-         % SUBSREF More than one return argument means cell or dot referencing was
-         % used
-         if (nargout > 1)
-            error('MappedTensor:InvalidReferencing', ...
-               '*** MappedTensor: ''{}'' and ''.'' referencing methods are not supported by MappedTensor objects.');
-         end
-         
-         % - Check reference type
-         switch (subs(1).type)
-            case {'.', '{}'}
-               % - Unsupported referencing
-               error('MappedTensor:InvalidReferencing', ...
-               '*** MappedTensor: ''{}'' and ''.'' referencing methods are not supported by MappedTensor objects.');
-               
-            case {'()'}
-               % - Call the internal subsref function
-               [varargout{1}] = my_subsref(mtVar, subs);
+      function v = subsref(mtVar, subs)
+      % SUBSREF Subscripted reference.
+        
+        % - Check reference type
+        switch (subs.type)
+        case {'()'}
+           % - Call the internal subsref function to access data
+           v = my_subsref(mtVar, subs);
+        otherwise
+           v = builtin('subsref', mtVar, subs);
+        end
+      end
 
-            otherwise
-               % - Unknown referencing type
-               error('MappedTensor:UnknownReferenceType', ...
-                  '*** MappedTensor: An unknown referencing method was used.');
-         end
+      function v = get.Data(mtVar)
+        v = subsref(mtVar, substruct('()', repmat({':'}, 1, ndims(mtVar))));
       end
       
-    
       
       % subsasgn - METHOD Overloaded subsasgn
       function [mtVar] = subsasgn(mtVar, S, tfData)
@@ -469,7 +470,7 @@ classdef MappedTensor < handle
          cellfun(@isvalidsubscript, S.subs);
 
          % - Test read-only status if tensor
-         if (mtVar.bReadOnly)
+         if (~mtVar.Writable)
             error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
          end
          
@@ -497,12 +498,12 @@ classdef MappedTensor < handle
          
          if (~isreal(tfData)) || (~isreal(mtVar))
             % - Assign to both real and complex parts
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, real(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
-            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, imag(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.Offset, real(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.Offset, imag(tfData), mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
          else
             % - Assign only real part
-            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.nHeaderBytes, tfData, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            mt_write_data(mtVar.hShimFunc, mtVar.hRealContent, S, mtVar.vnOriginalSize, mtVar.strStorageClass, mtVar.Offset, tfData, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
       end
       
@@ -643,7 +644,7 @@ classdef MappedTensor < handle
       % islogical - METHOD Overloaded islogical function
       function [bIsLogical] = islogical(mtVar)
       % ISLOGICAL True for logical array.
-         bIsLogical = isequal(mtVar.strClass, 'logical');
+         bIsLogical = isequal(mtVar.Format, 'logical');
       end
       
       % isnumeric - METHOD Overloaded isnumeric function
@@ -667,7 +668,7 @@ classdef MappedTensor < handle
       % ischar - METHOD Overloaded ischar function
       function [bIsChar] = ischar(mtVar)
       % ISCHAR  True for character array (string).
-         bIsChar = isequal(mtVar.strClass, 'char');
+         bIsChar = isequal(mtVar.Format, 'char');
       end
       
       % isnan - METHOD Overloaded isnan function
@@ -679,7 +680,7 @@ classdef MappedTensor < handle
       % isfloat - METHOD Overloaded isfloat function
       function [bIsFloat] = isfloat(mtVar)
       % ISFLOAT True for floating point arrays, both single and double.
-         bIsFloat = isequal(mtVar.strClass, 'single') || isequal(mtVar.strClass, 'double');
+         bIsFloat = isequal(mtVar.Format, 'single') || isequal(mtVar.Format, 'double');
       end
       
       % isinteger - METHOD Overloaded isinteger function
@@ -816,17 +817,53 @@ classdef MappedTensor < handle
       end
       
       %% display - METHOD Overloaded disp function
-      function display(mtVar)
+      function display(mtVar, iname)
       % DISPLAY Display array (short).
          strSize = strtrim(sprintf(' %d', size(mtVar)));
+
+
+         if nargin < 2,
+           if ~isempty(inputname(1))
+             iname = inputname(1);
+           else
+             iname = 'ans';
+           end
+         end
          
          if (mtVar.bIsComplex)
             strComplex = 'complex ';
          else
             strComplex = '';
          end
-         
-         disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> object, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
+
+         if ~isdeployed
+           disp(sprintf([ '%s = ' ...
+             '<a href="matlab:help MappedTensor">MappedTensor</a> ' ...
+             'object, containing %s%s [%s] (' ...
+             '<a href="matlab:methods ' class(mtVar) '">methods</a>,' ...
+             '<a href="matlab:doc(''' class(mtVar) ''')">doc</a>,' ...
+             '<a href="matlab:subsref(' iname ', substruct(''()'', repmat({'':''}, 1, ndims(' iname '))))">values</a>,' ...
+             '<a href="matlab:disp(' iname ');">more...</a>):' ], ...
+             iname, strComplex, mtVar.Format, strSize)); %#ok<DSPS>
+         else
+           disp(sprintf('  %s = MappedTensor object, containing %s%s [%s]:', ...
+             iname, strComplex, mtVar.Format, strSize));
+         end
+
+         disp(' ')
+         % now display few elements from the array
+         nb = 4;  % number of elements to display at begining and end.
+         index1 = 1:nb;
+         index2 = mtVar.nNumElements + (-nb:-1);
+         index1 = index1(index1 <= mtVar.nNumElements);
+         index2 = index2(1 <= index2 & index2 > max(index1));
+         if isempty(index2)
+           disp(subsref(mtVar, substruct('()', {index1})));
+         else
+           disp([  '  ' num2str(subsref(mtVar, substruct('()', {index1}))) ...
+           ' ... ' num2str(subsref(mtVar, substruct('()', {index2}))) ]);
+         end
+         disp(' ');
       end
       
       %% disp - METHOD Overloaded display function
@@ -839,16 +876,26 @@ classdef MappedTensor < handle
          else
             strComplex = '';
          end
-         
-         disp(sprintf('  <a href="matlab:help MappedTensor">MappedTensor</a> object, containing: %s%s [%s].', strComplex, mtVar.strClass, strSize)); %#ok<DSPS>
-         disp([ '    File: ' mtVar.strRealFilename ' ' mtVar.strCmplxFilename ]);
-         n = mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes;
-         if mtVar.bIsComplex, n=n*2; end
-         disp([ '    Size: ' num2str(n) ]);
-         if mtVar.bReadOnly
-           disp('    ReadOnly: yes')
+
+         if ~isempty(inputname(1))
+           iname = inputname(1);
+         else
+           iname = 'ans';
          end
-         disp('  <a href="matlab:methods(''MappedTensor'')">Methods</a>');
+
+         display(mtVar, iname);
+
+         disp([ '  Filename:   ' mtVar.Filename ' ' mtVar.strCmplxFilename ]);
+         disp([ '  Writable:   ' mat2str(mtVar.Writable) ])
+         disp([ '  Offset:     ' num2str(mtVar.Offset) ])
+         disp([ '  Format:     ' mtVar.Format ])
+         disp([ '  Data:       [' strtrim(sprintf(' %d', size(mtVar))) '] ' mtVar.Format ' array' ])
+         disp([ '  Persistent: ' mat2str(mtVar.bTemporary) ])
+
+         n = mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset;
+         if mtVar.bIsComplex, n=n*2; end
+         disp([ '  Size:       ' num2str(n) ]);
+         disp(' ');
       end
       
       %% horzcat, vertcat, cat - METHOD Overloaded concatenation functions (unsupported)
@@ -925,7 +972,7 @@ classdef MappedTensor < handle
             if (islogical(mtVar))
                strOutputClass = 'double';
             else
-               strOutputClass = mtVar.strClass;
+               strOutputClass = mtVar.Format;
             end
          
          elseif (strcmp(strReturnClass, 'default'))
@@ -1186,7 +1233,7 @@ classdef MappedTensor < handle
             vnNewTensorSize = vnSliceSize;
             vnNewTensorSize(nSliceDim) = vnTensorSize(nSliceDim);
             
-            mtNewVar = MappedTensor(vnNewTensorSize, 'Class', mtVar.strClass);
+            mtNewVar = MappedTensor(vnNewTensorSize, 'Class', mtVar.Format);
             
          else
             % - Store the result back in the original tensor, taking advantage
@@ -1248,16 +1295,16 @@ classdef MappedTensor < handle
                   tData = fhFunction([], nIndex, varargin{:});
                end
                
-               mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
+               mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), size(tData), mtNewVar.Format, mtNewVar.Offset, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                
             else
                % - Read source data, multiply by real factor
-               tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
+               tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.Format, mtVar.Offset, mtVar.bBigEndian);
                tData = tData .* mtVar.fRealFactor;
                
                % - Read complex part, if it exists
                if (mtVar.bIsComplex)
-                  tDataCmplx = mtVar.hShimFunc('read_chunks', mtVar.hCmplxContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.strClass, mtVar.nHeaderBytes, mtVar.bBigEndian);
+                  tDataCmplx = mtVar.hShimFunc('read_chunks', mtVar.hCmplxContent, mnTheseSourceChunks, 1:prod(vnSourceDataSize), 1:prod(vnSourceDataSize), vnSourceDataSize, mtVar.Format, mtVar.Offset, mtVar.bBigEndian);
                   tData = complex(tData, tDataCmplx .* mtVar.fComplexFactor);
                end
                
@@ -1278,11 +1325,11 @@ classdef MappedTensor < handle
                   end
                      
                   % - Write real and complex parts
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, real(tData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, imag(tData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, real(tData) ./ mtVar.fRealFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, imag(tData) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
                else
                   % - Write real part
-                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.strClass, mtNewVar.nHeaderBytes, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
+                  mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, tData ./ mtVar.fRealFactor, mtVar.bBigEndian);
                end
             end
             
@@ -1297,13 +1344,13 @@ classdef MappedTensor < handle
       % SAVEOBJ Save filter for objects.
       
          % - Generate a structure containing the pertinent properties
-         sVar.strRealFilename = mtVar.strRealFilename;
+         sVar.Filename = mtVar.Filename;
          sVar.bTemporary = mtVar.bTemporary;
-         sVar.strClass = mtVar.strClass;
+         sVar.Format = mtVar.Format;
          sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
          sVar.vnOriginalSize = mtVar.vnOriginalSize;
-         sVar.bReadOnly = mtVar.bReadOnly;
-         sVar.nHeaderBytes = mtVar.nHeaderBytes;
+         sVar.Writable = mtVar.Writable;
+         sVar.Offset = mtVar.Offset;
 
          % - Send a warning about poorly-supported loading
          warning('MappedTensor:UnsupportedObjectStorage', ...
@@ -1312,9 +1359,9 @@ classdef MappedTensor < handle
    
       
       %% fileparts - METHOD Return the files that underlie this MappedTensor
-      function [strRealFilename, strCmplxFilename] = fileparts(mtVar)
+      function [Filename, strCmplxFilename] = fileparts(mtVar)
          % FILEPARTS Return the files associated with the data
-         strRealFilename = mtVar.strRealFilename;
+         Filename = mtVar.Filename;
          strCmplxFilename = mtVar.strCmplxFilename;
       end
    end
@@ -1327,9 +1374,9 @@ classdef MappedTensor < handle
          % - Put back together arguments used to load the tensor
          cInputArgs = { ...
              sSavedVar.vnOriginalSize, ...
-             'Class', sSavedVar.strClass, ...
-             'ReadOnly', sSavedVar.bReadOnly, ...
-             'HeaderBytes', sSavedVar.nHeaderBytes ...
+             'Format', sSavedVar.Format, ...
+             'Writable', sSavedVar.Writable, ...
+             'Offset', sSavedVar.Offset ...
          };
 
          % - Try to create a new MappedTensor, with the saved parameters
@@ -1339,7 +1386,7 @@ classdef MappedTensor < handle
 
          else
             % - Map an existing file on disk
-            mtVar = MappedTensor(sSavedVar.strRealFilename, cInputArgs{:});
+            mtVar = MappedTensor(sSavedVar.Filename, cInputArgs{:});
          end
 
          % - Record permutation
@@ -1356,10 +1403,10 @@ classdef MappedTensor < handle
       function make_complex(mtVar)
          % - test to see if we can store complex values in the desired
          % representation
-         switch (mtVar.strClass)
+         switch (mtVar.Format)
             case {'char', 'logical'}
                error('MappedTensor:NoConversionComplexToClass', ...
-                  '*** MappedTensor: Cannot assign complex values to a tensor of class %s.', mtVar.strClass);
+                  '*** MappedTensor: Cannot assign complex values to a tensor of class %s.', mtVar.Format);
          end
          
          % - create temporary storage for the complex part of the tensor
@@ -1369,10 +1416,10 @@ classdef MappedTensor < handle
          end
          
          % - make enough space for a tensor
-         mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.nHeaderBytes, mtVar.strTempDir);
+         mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
          
          % - open the file
-         mtVar.hCmplxContent = mtVar.hShimFunc('open', mtVar.bReadOnly, mtVar.strCmplxFilename, mtVar.strMachineFormat);
+         mtVar.hCmplxContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.strCmplxFilename, mtVar.strMachineFormat);
          
          % - record that the tensor has a complex part
          mtVar.bIsComplex = true;
@@ -1432,12 +1479,12 @@ classdef MappedTensor < handle
       
       % cast - Overloaded "cast" method.
       %
-      % Usage: tfData = cast(mtVar, strClass <, bForce>)
+      % Usage: tfData = cast(mtVar, Format <, bForce>)
       %
       % See the documentation for the built-in "cast" function.
       %
       % The optional parameter 'bForce' 
-      function tfData = cast(mtVar, strClass, bForce)
+      function tfData = cast(mtVar, Format, bForce)
       % CAST  Cast a variable to a different data type or class.
       
          % - Should we really cast the entire tensor?
@@ -1448,10 +1495,10 @@ classdef MappedTensor < handle
          % - Validate the class
          try
             sSubs = substruct('()', {1});
-            cast(subsref(mtVar, sSubs), strClass);
+            cast(subsref(mtVar, sSubs), Format);
          catch
             error('MappedTensor:cast:UnsupportedCLass', ...
-                  '*** MappedTensor: Error: Unsupported data type for conversion: ''%s''', strClass);
+                  '*** MappedTensor: Error: Unsupported data type for conversion: ''%s''', Format);
          end
          
          % - Cast the object
@@ -1460,13 +1507,13 @@ classdef MappedTensor < handle
                '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
             
             sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
-            tfData = builtin('cast', subsref(mtVar, sSubs), strClass);
+            tfData = builtin('cast', subsref(mtVar, sSubs), Format);
             
          else
             % - Do a transparent cast
             tfData = mtVar;
             mtVar.bMustCast = true;
-            mtVar.strClass = strClass;
+            mtVar.Format = Format;
          end
       end
    end
@@ -1507,12 +1554,12 @@ function strFilename = create_temp_file(nNumEntries, d)
    end
 end
 
-function [nBytes, strStorageClass] = ClassSize(strClass)
+function [nBytes, strStorageClass] = ClassSize(Format)
    % - By default, the data storage class is identical to the definition class
-   strStorageClass = strClass;
+   strStorageClass = Format;
    
    % - Parse class argument
-   switch(lower(strClass))
+   switch(lower(Format))
       case {'char'}
          nBytes = 2;
          strStorageClass = 'uint16';
@@ -1783,13 +1830,13 @@ end
 %% Read / write functions
 
 % mt_read_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, bBigEndian, hRepSumFunc, hChunkLengthFunc)
+function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, Format, Offset, bBigEndian, hRepSumFunc, hChunkLengthFunc)
 
    % - Catch "read whole tensor" condition
    if (all(cellfun(@iscolon, sSubs.subs)))
       % - Read data
       tData = hShimFunc('read_all', hDataFile, vnTensorSize, ...
-         strClass, nHeaderBytes, double(bBigEndian));
+         Format, Offset, double(bBigEndian));
             
       % - Reshape stack and return
       tData = reshape(tData, vnTensorSize);
@@ -1807,17 +1854,17 @@ function [tData] = mt_read_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strCl
    mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
 
    % - Call shim read function
-   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnLinearIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes, double(bBigEndian));
+   tData = hShimFunc('read_chunks', hDataFile, mnFileChunkIndices, vnLinearIndices, vnReverseSort, vnDataSize, Format, Offset, double(bBigEndian));
 end
 
 % mt_write_data - FUNCTION Read a set of indices from the file, in an optimsed fashion
-function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHeaderBytes, tData, bBigEndian, hRepSumFunc, hChunkLengthFunc)
+function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, Format, Offset, tData, bBigEndian, hRepSumFunc, hChunkLengthFunc)
 
    % - Catch "read whole tensor" condition
    if (all(cellfun(@iscolon, sSubs.subs)))
       % - Write data and return
       hShimFunc('write_all', hDataFile, vnTensorSize, ...
-         strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
+         Format, Offset, cast(tData, Format), double(bBigEndian));
       return;
    end
 
@@ -1832,17 +1879,17 @@ function mt_write_data(hShimFunc, hDataFile, sSubs, vnTensorSize, strClass, nHea
    mnFileChunkIndices = SplitFileChunks(vnLinearIndices, hChunkLengthFunc);
    
    % - Call shim writing function
-   hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, cast(tData, strClass), double(bBigEndian));
+   hShimFunc('write_chunks', hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, Format, Offset, cast(tData, Format), double(bBigEndian));
 end
 
 % mt_read_data_chunks - FUNCTION Read data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnReverseSort' must be the
 % inverting indices from calling UNIQUE
-function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, strClass, nHeaderBytes)
+function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIndices, vnReverseSort, vnDataSize, Format, Offset)
    nNumChunks = size(mnFileChunkIndices, 1);
    
    % - Allocate data
-   [nClassSize, strStorageClass] = ClassSize(strClass);
+   [nClassSize, strStorageClass] = ClassSize(Format);
    vUniqueData = zeros(numel(vnUniqueIndices), 1, strStorageClass);
    
    % - Read data in chunks
@@ -1853,10 +1900,10 @@ function [tData] = mt_read_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueIn
       nChunkSize = mnFileChunkIndices(nChunkIndex, 3);
       
       % - Seek file to beginning of chunk
-      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + nHeaderBytes, 'bof');
+      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + Offset, 'bof');
       
       % - Normal forward read
-      vUniqueData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' strClass], (nChunkSkip-1) * nClassSize);
+      vUniqueData(nDataPointer:nDataPointer+nChunkSize-1) = fread(hDataFile, nChunkSize, [strStorageClass '=>' Format], (nChunkSkip-1) * nClassSize);
       
       % - Shift to next data chunk
       nDataPointer = nDataPointer + nChunkSize;
@@ -1869,7 +1916,7 @@ end
 % mt_write_data_chunks - FUNCTION Write data without sorting or checking indices
 % 'vnUniqueIndices' MUST be sorted and unique; 'vnUniqueDataIndices' must
 % be the corresponding indices into the data from calling UNIQUE
-function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, strClass, nHeaderBytes, tData)
+function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices, vnDataSize, Format, Offset, tData)
    nNumChunks = size(mnFileChunkIndices, 1);
 
    % - Do we need to replicate the data?
@@ -1887,14 +1934,14 @@ function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices
    
    % - Write data in chunks
    nDataPointer = 1;
-   [nClassSize, strStorageClass] = ClassSize(strClass);
+   [nClassSize, strStorageClass] = ClassSize(Format);
    for (nChunkIndex = 1:nNumChunks)
       % - Get chunk info
       nChunkSkip = mnFileChunkIndices(nChunkIndex, 2);
       nChunkSize = mnFileChunkIndices(nChunkIndex, 3);
 
       % - Seek file to beginning of chunk
-      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + nHeaderBytes, 'bof');
+      fseek(hDataFile, (mnFileChunkIndices(nChunkIndex, 1)-1) * nClassSize + Offset, 'bof');
       
       % - Normal forward write of chunk data
       fwrite(hDataFile, vUniqueData(nDataPointer:nDataPointer+nChunkSize-1), strStorageClass, (nChunkSkip-1) * nClassSize);
@@ -1905,20 +1952,20 @@ function mt_write_data_chunks(hDataFile, mnFileChunkIndices, vnUniqueDataIndices
 end
 
 % mt_read_all - FUNCTION Read the entire stack
-function [tData] = mt_read_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, ~)
+function [tData] = mt_read_all(hDataFile, vnTensorSize, Format, Offset, ~)
    % - Allocate data
-   [~, strStorageClass] = ClassSize(strClass);
+   [~, strStorageClass] = ClassSize(Format);
 %    tData = zeros(vnTensorSize, strStorageClass);
    
    % - Seek file to beginning of data
-   fseek(hDataFile, nHeaderBytes, 'bof');
+   fseek(hDataFile, Offset, 'bof');
    
    % - Normal forward read
-   tData = fread(hDataFile, prod(vnTensorSize), [strStorageClass '=>' strClass], 0);
+   tData = fread(hDataFile, prod(vnTensorSize), [strStorageClass '=>' Format], 0);
 end
 
 % mt_write_all - FUNCTION Write the entire stack
-function mt_write_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, tData, ~)
+function mt_write_all(hDataFile, vnTensorSize, Format, Offset, tData, ~)
 
    % - Do we need to replicate the data?
    if (isscalar(tData) && prod(vnTensorSize) > 1)
@@ -1931,10 +1978,10 @@ function mt_write_all(hDataFile, vnTensorSize, strClass, nHeaderBytes, tData, ~)
    end
    
    % - Get storage class
-   [~, strStorageClass] = ClassSize(strClass);
+   [~, strStorageClass] = ClassSize(Format);
 
    % - Seek file to beginning of data
-   fseek(hDataFile,  nHeaderBytes, 'bof');
+   fseek(hDataFile,  Offset, 'bof');
       
    % - Normal forward write of data
    fwrite(hDataFile, tData, strStorageClass, 0);
@@ -2255,18 +2302,18 @@ end
          end
          
          % - Reference the tensor data element
-         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+         tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.Offset, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          
          if (mtVar.bIsComplex)
-            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.nHeaderBytes, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
+            tfImagData = mt_read_data(mtVar.hShimFunc, mtVar.hCmplxContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.Offset, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
          end
             
          % - Cast data, if required
          if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
+            tfData = cast(tfData, mtVar.Format);
             
             if (mtVar.bIsComplex)
-               tfImagData = cast(tfImagData, mtVar.strClass);
+               tfImagData = cast(tfImagData, mtVar.Format);
             end
          end
          
@@ -2281,7 +2328,7 @@ end
          % - Recast data, if required, to take into account scaling which
          % can occur in another class
          if (mtVar.bMustCast)
-            tfData = cast(tfData, mtVar.strClass);
+            tfData = cast(tfData, mtVar.Format);
          end
          
          % - Permute dimensions
