@@ -261,7 +261,7 @@
 
 classdef MappedTensor < hgsetget
   properties % public, in sync with memmapfile
-    Filename;          		% Binary data file on disk (real part of tensor)
+    Filename;               % Binary data file on disk (real part of tensor)
     Format   = 'double';  % The class of this mapped tensor
     Writable = true;      % Should the data be protected from writing?
     Offset   = 0;         % The number of bytes to skip at the beginning of the file
