@@ -1,8 +1,8 @@
 function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin) 
   % ARRAYFUN Apply a function on the entire array, in slices.
-  %   ARRAYFUN(M, FUN, ...) applies the function specified by FUN along the
-  %   array M largest dimension. Each slice is passed individually to
-  %   FUN, along with the slice index and any trailing arguments (...).
+  %   ARRAYFUN(M, FUN, ...) applies the function specified by FUN.
+  %   Each slice is passed individually to FUN, along with the slice index and
+  %   any trailing arguments (...).
   %   The major advantage of ARRAYFUN is a reduced memory usage.
   %   Without output argument, the initial array is updated with the new value.
   %
@@ -17,8 +17,8 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   %   'WriteOnly' parameter (see below).
   %
   %   ARRAYFUN(M, FUN, DIM) applies the function specified by FUN along 
-  %   the specified dimension DIM. An empty DIM will use the largest
-  %   dimension.
+  %   the specified dimension DIM. An empty DIM will guess the optimal
+  %   for performance.
   %
   %   P = ARRAYFUN(...) returns the result in a new object P (instead of
   %   updating the original array).
@@ -110,7 +110,23 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   vnTensorSize = size(mtVar);
 
   if isempty(nSliceDim)
-   [~,nSliceDim] = max(vnTensorSize);
+    % we search for the last dimension, for which the lower chunk dimensions fit
+    % in 1/4-th of free memory
+    [~,~,sys] = version(mtVar);
+    max_sz = sys.free/4*1024; % in B
+    for d=ndims(mtVar):-1:1
+      sz = vnTensorSize;
+      sz(d) = [];
+      if prod(sz)*(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset) <= max_sz
+        nSliceDim = d; break;
+      end
+    end
+    if isempty(nSliceDim)
+      nSliceDim = length(vnTensorSize); % use last dimension
+    end
+    if bVerbose
+      fprintf(1, '--- MappedTensor/arrayfun: Using Dimension=%i\n', nSliceDim);
+    end
   end
 
   % - Check slice dimension

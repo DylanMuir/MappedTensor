@@ -1,8 +1,8 @@
 function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin) 
   % ARRAYFUN2 Apply a function on two similar arrays, in slices.
-  %   ARRAYFUN2(M1, M2, FUN, ...) applies the function specified by FUN along the
-  %   array M1 largest dimension. Each slice is passed individually to
-  %   FUN, along with the slice index and any trailing arguments (...).
+  %   ARRAYFUN2(M1, M2, FUN, ...) applies the function specified by FUN.
+  %   Each slice is passed individually to FUN, along with the slice index and
+  %   any trailing arguments (...).
   %   The major advantage of ARRAYFUN2 is a reduced memory usage.
   %   Without output argument, the initial array is updated with the new value.
   %
@@ -13,8 +13,8 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
   %     can be given. It is recommended to use function handles for FUN.
   %
   %   ARRAYFUN2(M1, M2, FUN, DIM) applies the function specified by FUN along 
-  %   the specified dimension DIM. An empty DIM will use the largest
-  %   dimension.
+  %   the specified dimension DIM.  An empty DIM will guess the optimal
+  %   for performance.
   %
   %   P = ARRAYFUN2(...) returns the result in a new object P (instead of
   %   updating the original array M1).
@@ -86,14 +86,36 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
   varargin(toremove) = [];
 
   % - Get tensor size
+  if isa(mtVar1, 'MappedTensor') mtVar = mtVar1;
+  else                           mtVar = mtVar1; end
+  
   vnTensorSize = size(mtVar1);
-  if ~all(vnTensorSize == size(mtVar2))
+  % OK when: sizes do match, or one is scalar
+  if ~isscalar(mtVar1) && ~isscalar(mtVar2) ...
+    && (length(size(mtVar1)) ~= length(size(mtVar2)) || ~all(vnTensorSize == size(mtVar2)))
     error('MappedTensor:sizemismatch', ...
-          '*** MappedTensor: arrayfun2: size of the two arrays do not match.');
+          '*** MappedTensor: arrayfun2: size of the two arrays do not match (or one must be scalar).');
   end
 
   if isempty(nSliceDim)
-   [~,nSliceDim] = max(vnTensorSize);
+    % we search for the last dimension, for which the lower chunk dimensions fit
+    % in 1/4-th of free memory
+    [~,~,sys] = version(mtVar);
+    max_sz = sys.free/2*1024; % in B
+    for d=ndims(mtVar):-1:1
+      sz = vnTensorSize;
+      sz(d) = [];
+      disp([ d prod(sz)*(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset)/1e6 ])
+      if prod(sz)*(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset) <= max_sz
+        nSliceDim = d; break;
+      end
+    end
+    if isempty(nSliceDim)
+      nSliceDim = length(vnTensorSize); % use last dimension
+    end
+    if bVerbose
+      fprintf(1, '--- MappedTensor/arrayfun2: Using Dimension=%i\n', nSliceDim);
+    end
   end
 
   % - Check slice dimension
@@ -130,49 +152,50 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
     vnNewTensorSize = vnSliceSize;
     vnNewTensorSize(nSliceDim) = vnTensorSize(nSliceDim);
     
-    mtNewVar = MappedTensor(vnNewTensorSize, 'Class', mtVar1.Format);
+    mtNewVar = MappedTensor(vnNewTensorSize, 'Class', mtVar.Format);
     
   elseif bEarlyReturn
     mtNewVar = [];
   else
     % - Store the result back in the original tensor, taking advantage
     % of the handle property of a MappedTensor
-    mtNewVar = mtVar1;
+    mtNewVar = mtVar;
+    
     vnNewTensorSize = size(mtVar1);
     
     % - Are we attempting to re-size the tensor?
     if (~isequal(vnSliceSize([1:nSliceDim-1 nSliceDim+1:end]), vnTensorSize([1:nSliceDim-1 nSliceDim+1:end])))
        error('MappedTensor:IncorrectSliceDimensions', ...
-          '*** MappedTensor/arrayfun: A tensor cannot be resized during a slice operation.\n       Assign the output to a new tensor.');
+          '*** MappedTensor/arrayfun2: A tensor cannot be resized during a slice operation.\n       Assign the output to a new tensor.');
     end
   end
 
   % - Create a referencing window
   cvColons = repmat({':'}, 1, numel(vnTensorSize));
   cvColons{nSliceDim} = 1;
-  [vnLinearSourceWindow, vnSourceDataSize] = ConvertColonsCheckLims(cvColons, vnTensorSize, mtVar1.hRepSumFunc);
+  [vnLinearSourceWindow, vnSourceDataSize] = ConvertColonsCheckLims(cvColons, vnTensorSize, mtVar.hRepSumFunc);
 
   cvTest = repmat({1}, 1, numel(vnTensorSize));
   cvTest{nSliceDim} = 2;
-  nTestIndex = ConvertColonsCheckLims(cvTest, vnTensorSize, mtVar1.hRepSumFunc);
+  nTestIndex = ConvertColonsCheckLims(cvTest, vnTensorSize, mtVar.hRepSumFunc);
   nSourceWindowStep = nTestIndex - vnLinearSourceWindow(1);
 
   % - Split source window into readable chunks
-  mnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow, mtVar1.hChunkLengthFunc);
+  mnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow, mtVar.hChunkLengthFunc);
 
   if ~bEarlyReturn
     if (bNewTensor)
       cvColons = repmat({':'}, 1, numel(vnNewTensorSize));
       cvColons{nSliceDim} = 1;
-      [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize, mtVar1.hRepSumFunc);
+      [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize, mtVar.hRepSumFunc);
       
       cvTest = repmat({1}, 1, numel(vnTensorSize));
       cvTest{nSliceDim} = 2;
-      nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize, mtVar1.hRepSumFunc);
+      nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize, mtVar.hRepSumFunc);
       nDestWindowStep = nTestIndex - vnLinearDestWindow(1);
       
       % - Split into readable chunks
-      mnDestChunkIndices = SplitFileChunks(vnLinearDestWindow, mtVar1.hChunkLengthFunc);
+      mnDestChunkIndices = SplitFileChunks(vnLinearDestWindow, mtVar.hChunkLengthFunc);
     else
       mnDestChunkIndices = mnSourceChunkIndices;
       nDestWindowStep = nSourceWindowStep;
@@ -182,7 +205,7 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
 
   % - Slice up along specified dimension
   if bVerbose
-   fprintf(1, '--- MappedTensor/arrayfun: [%6.2f%%]', 0);
+    fprintf(1, '--- MappedTensor/arrayfun: [%6.2f%%]', 0);
   end
   
   for (nIndex = 1:vnTensorSize(nSliceDim))
@@ -216,15 +239,15 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
       end
          
       % - Write real and complex parts
-      mtVar1.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, ...
+      mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, ...
         1:numel(tData1), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, ...
-        real(tData1) ./ mtVar1.fRealFactor, mtVar1.bBigEndian);
-      mtVar1.hShimFunc('write_chunks', mtNewVar.hCmplxContent, mnTheseDestChunks, ...
+        real(tData1) ./ mtVar.fRealFactor, mtVar.bBigEndian);
+      mtVar.hShimFunc('write_chunks', mtNewVar.hCmplxContent, mnTheseDestChunks, ...
         1:numel(tData1), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, ...
-        imag(tData1) ./ mtVar1.fComplexFactor, mtVar1.bBigEndian);
+        imag(tData1) ./ mtVar.fComplexFactor, mtVar.bBigEndian);
     else
       % - Write real part
-      mtVar1.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData1), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, tData1 ./ mtVar1.fRealFactor, mtVar1.bBigEndian);
+      mtVar.hShimFunc('write_chunks', mtNewVar.hRealContent, mnTheseDestChunks, 1:numel(tData1), vnDestDataSize, mtNewVar.Format, mtNewVar.Offset, tData1 ./ mtVar.fRealFactor, mtVar.bBigEndian);
     end
 
     if bVerbose
@@ -239,6 +262,8 @@ end
 % ------------------------------------------------------------------------------
 function tData = arrayfun2_read_data(mtVar, mnTheseSourceChunks, vnSourceDataSize)
   % read a chunk of data in mtVar
+
+  if ~isa(mtVar, 'MappedTensor'), tData = mtVar; return; end
 
   % - Read source data, multiply by real factor
   tData = mtVar.hShimFunc('read_chunks', mtVar.hRealContent, mnTheseSourceChunks, ...
