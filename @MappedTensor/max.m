@@ -1,6 +1,7 @@
-% max - METHOD Overloaded max function for usage "max(mtVar, ...)"
 function [tfMax, tnMaxIndices] = max(mtVar, varargin)
 % MAX    Largest component.
+%
+% See also: max
 
    % - Check arguments
    if (nargin > 3)

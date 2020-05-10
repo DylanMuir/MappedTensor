@@ -1,13 +1,12 @@
-% cast - Overloaded "cast" method.
+function tfData = cast(mtVar, Format, bForce)
+% CAST  Cast a variable to a different data type or class.
 %
 % Usage: tfData = cast(mtVar, Format <, bForce>)
 %
-% See the documentation for the built-in "cast" function.
+% The optional parameter 'bForce'
 %
-% The optional parameter 'bForce' 
+% See also: cast
 
-function tfData = cast(mtVar, Format, bForce)
-% CAST  Cast a variable to a different data type or class.
 
    % - Should we really cast the entire tensor?
    if (~exist('bForce', 'var') || isempty(bForce))

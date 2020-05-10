@@ -1,4 +1,3 @@
-%% sum - METHOD Overloaded sum function for usage "sum(mtVar <, dim, outtype>)"
 function [tFinalSum] = sum(mtVar, varargin)
 % SUM Sum of elements.
 %   S = SUM(M) sums M along first dimension. 

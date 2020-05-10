@@ -14,7 +14,7 @@
 %    M = MAPPEDTENSOR(dim, ...) allocates a MAPPEDTENSOR object to store an array
 %    with specified size [d1 d2...]. When only one dimension value is specified, 
 %    the actual dimension is for a square array [d d].
-
+%
 %    M = MAPPEDTENSOR(FILENAME, [d1 d2...], 'FORMAT', class, ...) constructs a 
 %    MAPPEDTENSOR object that re-uses an existing map file FILENAME for an array
 %    with dimensions [d1 d2...]. The full size, class, and offset of the file must  
@@ -23,7 +23,7 @@
 %
 %    M = MAPPEDTENSOR(ARRAY) constructs a MAPPEDTENSOR object that maps a 
 %    numeric array ARRAY into a temporary file. The array must be 2D or 
-%    more (not scalar, nor vector).
+%    more (not scalar, nor vector that would conflict with a dimension setting).
 %    This syntax implies to already allocate the initial array, which limits the 
 %    size of the MappedTensor. For large arrays, it is more efficient to 
 %    pre-allocate the object with specified dimensions or the 'Size' property
@@ -261,11 +261,11 @@
 
 classdef MappedTensor < hgsetget
   properties % public, in sync with memmapfile
-    Filename;               % Binary data file on disk (real part of tensor)
+    Filename;             % Binary data file on disk (real part of tensor)
     Format   = 'double';  % The class of this mapped tensor
     Writable = true;      % Should the data be protected from writing?
     Offset   = 0;         % The number of bytes to skip at the beginning of the file
-    Data;                 % the actual Data
+    Data;                 % The actual Data
   end
   
   properties (Access = private)
@@ -637,6 +637,18 @@ classdef MappedTensor < hgsetget
     % Example: m=MappedTensor(rand(20,10)); all(size(ipermute(m,[2 1])) == [10 20])
        vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
        mtVar = permute(mtVar, vnNewOrder);
+    end
+    
+    function mtVar = reshape(mtVar, varargin)
+    % RESHAPE Reshape array.
+    %   RESHAPE(X,M,N, ...) returns an N-D array with the same
+    %   elements as X but reshaped to have the size M-by-N-by-P-by-...
+    %   M*N*P*... must be the same as PROD(SIZE(X)).
+      vnNewOrder = [ varargin{:} ];
+      if prod(vnNewOrder) ~= prod(size(mtVar))
+        error([ mfilename ': reshape: number of elements [ M,n,...] must not change.' ]);
+      end
+      mtVar.vnDimensionOrder = vnNewOrder;
     end
       
     % ctranspose - METHOD Overloaded ctranspose function
