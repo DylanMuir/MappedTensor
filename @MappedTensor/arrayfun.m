@@ -1,10 +1,10 @@
-%% arrayfun - METHOD Execute a function on the entire tensor, in slices
 function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin) 
   % ARRAYFUN Apply a function on the entire array, in slices.
-  %   ARRAYFUN(M, FUN) applies the function specified by FUN along the
+  %   ARRAYFUN(M, FUN, ...) applies the function specified by FUN along the
   %   array M largest dimension. Each slice is passed individually to
   %   FUN, along with the slice index and any trailing arguments (...).
   %   The major advantage of ARRAYFUN is a reduced memory usage.
+  %   Without output argument, the initial array is updated with the new value.
   %
   %   The function FUN syntax is:
   %
@@ -39,6 +39,9 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   %
   %     'Verbose' -- a logical, being True to display operation progress.
   %
+  %     'EarlyReturn' -- a logical, being True returns prematurely with first
+  %     non empty chunk result. The result is a normal Matlab array. 
+  %
   %   Examples:
   %   =========
   %
@@ -61,6 +64,10 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
 
   % defaults
   nSliceDim = []; vnSliceSize = []; bWriteOnly = false; bVerbose = false;
+  bEarlyReturn = false;
+
+  % - Shall we generate a new tensor?
+  bNewTensor = false;
 
   % parse input arguments (nSliceDim, vnSliceSize, bWriteOnly, ...)
   toremove = []; firstnumeric = false;
@@ -82,6 +89,11 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
       case 'verbose'
         bVerbose = varargin{index+1};
         toremove = [ toremove index index+1 ];
+      case 'earlyreturn'
+        bEarlyReturn = varargin{index+1};
+        toremove     = [ toremove index index+1 ];
+        bWriteOnly   = false;
+        bNewTensor   = true;
       end
     end
   end
@@ -90,9 +102,6 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   % - Get tensor size
   vnTensorSize = size(mtVar);
 
-  % - Shall we generate a new tensor?
-  bNewTensor = false;
-
   if isempty(nSliceDim)
    [~,nSliceDim] = max(vnTensorSize);
   end
@@ -100,10 +109,10 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   % - Check slice dimension
   if ((nSliceDim < 1) || (nSliceDim > numel(vnTensorSize)))
     error('MappedTensor:badsubscript', ...
-          '*** MappedTensor: Index exceeds matrix dimensions.');
+          '*** MappedTensor: arrayfun: Index exceeds matrix dimensions.');
   end
 
-  % - Was the slice size explicity provided?
+  % - Was the slice size explicitly provided?
   if isempty(vnSliceSize)
     vnSliceSize = vnTensorSize;
     vnSliceSize(nSliceDim) = 1;
@@ -117,7 +126,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
     % lost
     if (nargout == 0)
        warning('MappedTensor:LostSliceOutput', ...
-          '--- MappedTensor: Warning: The output of a arrayfun command is likely to be thrown away...');
+          '--- MappedTensor: arrayfun: The output of a arrayfun command is likely to be thrown away...');
     end
   end
 
@@ -135,12 +144,14 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   end
 
   % - Shall we create a new return variable?
-  if (bNewTensor)
+  if (~bEarlyReturn && bNewTensor)
     vnNewTensorSize = vnSliceSize;
     vnNewTensorSize(nSliceDim) = vnTensorSize(nSliceDim);
     
     mtNewVar = MappedTensor(vnNewTensorSize, 'Class', mtVar.Format);
     
+  elseif bEarlyReturn
+    mtNewVar = [];
   else
     % - Store the result back in the original tensor, taking advantage
     % of the handle property of a MappedTensor
@@ -150,7 +161,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
     % - Are we attempting to re-size the tensor?
     if (~isequal(vnSliceSize([1:nSliceDim-1 nSliceDim+1:end]), vnTensorSize([1:nSliceDim-1 nSliceDim+1:end])))
        error('MappedTensor:IncorrectSliceDimensions', ...
-          '*** MappedTensor/arrayfun: A tensor cannot resized during a slice operation.\n       Assign the output to a new tensor.');
+          '*** MappedTensor: arrayfun: A tensor cannot be resized during a slice operation.\n       Assign the output to a new tensor.');
     end
   end
 
@@ -167,22 +178,24 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   % - Split source window into readable chunks
   mnSourceChunkIndices = SplitFileChunks(vnLinearSourceWindow, mtVar.hChunkLengthFunc);
 
-  if (bNewTensor)
-    cvColons = repmat({':'}, 1, numel(vnNewTensorSize));
-    cvColons{nSliceDim} = 1;
-    [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize, mtVar.hRepSumFunc);
-    
-    cvTest = repmat({1}, 1, numel(vnTensorSize));
-    cvTest{nSliceDim} = 2;
-    nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize, mtVar.hRepSumFunc);
-    nDestWindowStep = nTestIndex - vnLinearDestWindow(1);
-    
-    % - Split into readable chunks
-    mnDestChunkIndices = SplitFileChunks(vnLinearDestWindow, mtVar.hChunkLengthFunc);
-  else
-    mnDestChunkIndices = mnSourceChunkIndices;
-    nDestWindowStep = nSourceWindowStep;
-    vnDestDataSize = vnSourceDataSize;
+  if ~bEarlyReturn
+    if (bNewTensor)
+      cvColons = repmat({':'}, 1, numel(vnNewTensorSize));
+      cvColons{nSliceDim} = 1;
+      [vnLinearDestWindow, vnDestDataSize] = ConvertColonsCheckLims(cvColons, vnNewTensorSize, mtVar.hRepSumFunc);
+      
+      cvTest = repmat({1}, 1, numel(vnTensorSize));
+      cvTest{nSliceDim} = 2;
+      nTestIndex = ConvertColonsCheckLims(cvTest, vnNewTensorSize, mtVar.hRepSumFunc);
+      nDestWindowStep = nTestIndex - vnLinearDestWindow(1);
+      
+      % - Split into readable chunks
+      mnDestChunkIndices = SplitFileChunks(vnLinearDestWindow, mtVar.hChunkLengthFunc);
+    else
+      mnDestChunkIndices = mnSourceChunkIndices;
+      nDestWindowStep = nSourceWindowStep;
+      vnDestDataSize = vnSourceDataSize;
+    end
   end
 
   % - Slice up along specified dimension
@@ -193,10 +206,12 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   for (nIndex = 1:vnTensorSize(nSliceDim))
     % - Get chunks for this indexing window
     mnTheseSourceChunks = bsxfun(@plus, mnSourceChunkIndices, [(nIndex-1) * nSourceWindowStep 0 0]);
-    mnTheseDestChunks = bsxfun(@plus, mnDestChunkIndices, [(nIndex-1) * nDestWindowStep 0 0]);
+    if ~bEarlyReturn
+      mnTheseDestChunks = bsxfun(@plus, mnDestChunkIndices, [(nIndex-1) * nDestWindowStep 0 0]);
+    end
 
     % - Handle a "slice assign" function with no input arguments efficiently
-    if (bWriteOnly)
+    if (bWriteOnly && ~bEarlyReturn)
       % - Call function
       if (nargin(fhFunction) == 0)
         tData = feval(fhFunction);
@@ -226,6 +241,12 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
         tData = feval(fhFunction,tData, nIndex, varargin{:});
       else
         tData = feval(fhFunction,tData, varargin{:});
+      end
+
+      % handle early return with single chunk
+      if bEarlyReturn && ~isempty(tData) && any(tData)
+        mtNewVar = tData;
+        return;
       end
 
       % - Write results
