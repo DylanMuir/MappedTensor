@@ -18,11 +18,13 @@ dim = []; % will use max dim
 switch char(op)
 case {'abs','acosh','acos','asinh','asin','atanh','atan','ceil','conj','cosh','cos','del2','exp',...
   'floor','imag','isfinite','isinf','isnan','log10','log','not',...
-  'real','round','sign','sinh','sin','sqrt','tanh','tan','conj'}
+  'real','round','sign','sinh','sin','sqrt','tanh','tan','conj','uplus','uminus'}
   % pure unary operators without argument, and not changing slice shape.
+  
 case 'del2'
   % DEL2 Discrete Laplacian, with prefactor
   op = @(s)del2(s)*2*ndims(a);
+  
 case {'min','max'}
   if ~isempty(varargin)
     dim2 = varargin{1}; % must not be same as the arrayfun dim
@@ -35,6 +37,7 @@ case {'min','max'}
   varg = { 'SliceSize', sz0 };
   op = @(s,n)feval(op, s, [], dim2); % ignore slice index
   flag_newarray = true;
+  
 case {'sum','var','median','mean','prod','cumsum','cumprod'}
   if ~isempty(varargin)
     dim2 = varargin{1}; % must not be same as the arrayfun dim
@@ -47,22 +50,26 @@ case {'sum','var','median','mean','prod','cumsum','cumprod'}
   varg = { 'SliceSize', sz0 };
   op = @(s,n)feval(op, s, dim2); % ignore slice index
   flag_newarray = true;
+  
 case 'norm'
   varg = { 'SliceSize', ones(1,ndims(a)) }; % each norm(slice) is a scalar
   op = @(s,n)feval(op, s(:), varargin{:}); % ignore slice index, use vector
   flag_newarray = true;
   % TODO: merge all norms ??
+  
 case 'all'
   % all requires to test the whole tensor.
   % any could be restricted to test until true and then break.
   varg = { 'SliceSize', ones(1,ndims(a)) }; % each all(slice) is a single scalar
   op = @(s,n)feval(op, s(:));
   flag_newarray = true;
+  
 case {'find','any','nonzeros'}
   varg = { 'EarlyReturn',true };
   flag_newarray = true;
+  
 otherwise
-  error([ mfilename ': unary: ' op ' is an unsupported operator.' ]);
+  error([ mfilename ': ' op ' is an unsupported operator.' ]);
 end
 
 if nargout == 0 && ~flag_newarray
@@ -84,7 +91,7 @@ ops = {'abs','acosh','acos','asinh','asin','atanh','atan','ceil','conj', ...
   'cosh','cos','del2','exp',...
   'floor','imag','isfinite','isinf','isnan','log10','log','not',...
   'real','round','sign','sinh','sin','sqrt','tanh','tan','conj', ...
-  'del2','var','median','mean','prod','cumsum','cumprod','norm','all','any'};
+  'del2','var','median','mean','prod','cumsum','cumprod','norm','all','any','uminus'};
 for index=1:numel(ops)
   op = ops{index};
   

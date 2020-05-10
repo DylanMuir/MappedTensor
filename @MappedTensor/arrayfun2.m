@@ -32,31 +32,26 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
   %     'Verbose' -- a logical, being True to display operation progress.
   %
   %     'EarlyReturn' -- a logical, being True returns prematurely with first
-  %     non empty chunk result. The result is a normal Matlab array. 
+  %     non empty chunk result. The result is a normal Matlab array.
+  %
+  %     'InPlace' -- a logical, being True when operation is carried-out in
+  %     place. The result is stored in the initial array (when possible).
+  %     Default is true.
   %
   %   Examples:
   %   =========
   %
   %     arrayfun(M1, M2, @plus);
-  %       each slice of the third dimension of M, taken in turn, is 
-  %       passed to fft2 and the result stored back into initial array.
-  %       It is equivalent in result to M(:) = abs(fft2(M(:, :, :))) but
-  %       operates by slice, with reduced memory requirements. If no
-  %       output argument is specified, the initial array is updated.
+  %       each slice of the third dimension of M1 ans M2, taken in turn, are 
+  %       passed to @plus and the result is stored back into initial array.
+  %       If no output argument is specified, the initial array is updated.
   %
-  %     P = arrayfun(M, @(x)(sum(x)), 3, 'SliceSize', [1 10 1]);
-  %       creates a new MappedTensor with size [1 10 size(M,3) ].
-  %
-  %     arrayfun(M, @()(randn(10, 10)), 3);
-  %       assigns random numbers to each slice of M
-  %
-  %     arrayfun(M, @(x, n)(x .* rand*n), 3);
-  %       scales each slice along 3rd dimension with a single random
-  %       number times the slice index.
+  %     P = arrayfun(M1, M2, @plus);
+  %       same as above, but generates a new array.
 
   % defaults
   nSliceDim = []; vnSliceSize = []; bVerbose = false;
-  bEarlyReturn = false;
+  bEarlyReturn = false; bInPlace = true;
 
   % - Shall we generate a new tensor?
   bNewTensor = false;
@@ -77,6 +72,9 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
         toremove = [ toremove index index+1 ];
       case 'verbose'
         bVerbose = varargin{index+1};
+        toremove = [ toremove index index+1 ];
+      case 'inplace'
+        bInPlace = varargin{index+1};
         toremove = [ toremove index index+1 ];
       case 'earlyreturn'
         bEarlyReturn = varargin{index+1};
@@ -116,14 +114,14 @@ function [mtNewVar] = arrayfun2(mtVar1, mtVar2, fhFunction, varargin)
     
     % - Display a warning if the output of this command is likely to be
     % lost
-    if (nargout == 0)
+    if (nargout == 0) || bInPlace
        warning('MappedTensor:LostSliceOutput', ...
           '--- MappedTensor: arrayfun2: The output of a arrayfun2 command is likely to be thrown away...');
     end
   end
 
   % - If an explicit return argument is requested, construct a new tensor
-  if (nargout == 1)
+  if (nargout == 1) || ~bInPlace
     bNewTensor = true;
   end
 
