@@ -40,7 +40,11 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   %     'Verbose' -- a logical, being True to display operation progress.
   %
   %     'EarlyReturn' -- a logical, being True returns prematurely with first
-  %     non empty chunk result. The result is a normal Matlab array. 
+  %     non empty chunk result. The result is a normal Matlab array.
+  %
+  %     'InPlace' -- a logical, being True when operation is carried-out in
+  %     place. The result is stored in the initial array (when possible).
+  %     Default is true.
   %
   %   Examples:
   %   =========
@@ -64,7 +68,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
 
   % defaults
   nSliceDim = []; vnSliceSize = []; bWriteOnly = false; bVerbose = false;
-  bEarlyReturn = false;
+  bEarlyReturn = false; bInPlace = true;
 
   % - Shall we generate a new tensor?
   bNewTensor = false;
@@ -88,6 +92,9 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
         toremove = [ toremove index index+1 ];
       case 'verbose'
         bVerbose = varargin{index+1};
+        toremove = [ toremove index index+1 ];
+      case 'inplace'
+        bInPlace = varargin{index+1};
         toremove = [ toremove index index+1 ];
       case 'earlyreturn'
         bEarlyReturn = varargin{index+1};
@@ -124,7 +131,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
     
     % - Display a warning if the output of this command is likely to be
     % lost
-    if (nargout == 0)
+    if (nargout == 0) || bInPlace
        warning('MappedTensor:LostSliceOutput', ...
           '--- MappedTensor: arrayfun: The output of a arrayfun command is likely to be thrown away...');
     end
@@ -139,7 +146,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   end
 
   % - If an explicit return argument is requested, construct a new tensor
-  if (nargout == 1)
+  if (nargout == 1) || ~bInPlace
     bNewTensor = true;
   end
 
