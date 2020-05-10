@@ -649,11 +649,25 @@ classdef MappedTensor < hgsetget
     %   RESHAPE(X,M,N, ...) returns an N-D array with the same
     %   elements as X but reshaped to have the size M-by-N-by-P-by-...
     %   M*N*P*... must be the same as PROD(SIZE(X)).
-      vnNewOrder = [ varargin{:} ];
-      if prod(vnNewOrder) ~= prod(size(mtVar))
-        error([ mfilename ': reshape: number of elements [ M,n,...] must not change.' ]);
+      vnNewSize = [ varargin{:} ];
+      vnOldSize = size(mtVar);
+      if prod(vnNewSize) ~= prod(size(mtVar))
+        error([ mfilename ': reshape: number of elements [ M,N,...] must not change.' ]);
       end
-      mtVar.vnDimensionOrder = vnNewOrder;
+      mtVar.vnOriginalSize = vnNewSize;
+      
+      if numel(vnNewSize) > numel(vnOldSize)
+        % fill new dimensions, if any, with new DimensionOrder
+        for index=(numel(vnOldSize)+1):numel(vnNewSize)
+          mtVar.vnDimensionOrder(index) = index;
+        end
+      elseif numel(vnNewSize) < numel(vnOldSize)
+        % remove some dimensions
+        for index=(numel(vnNewSize)+1):numel(vnOldSize)
+          mtVar.vnDimensionOrder(mtVar.vnDimensionOrder==index) = 0;
+        end
+        mtVar.vnDimensionOrder = nonzeros(mtVar.vnDimensionOrder);
+      end
     end
       
     % ctranspose - METHOD Overloaded ctranspose function
