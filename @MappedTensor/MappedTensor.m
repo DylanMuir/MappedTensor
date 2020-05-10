@@ -591,17 +591,22 @@ classdef MappedTensor < hgsetget
         % - Return the total number of dimensions in the tensor
         nDim = length(size(mtVar));
     end
+
+    function tf = isempty(self)
+    % ISEMPTY True for empty array.
+      tf = (self.nNumElements == 1 && subsref(self, substruct('()', {1})) == 0);
+    end
       
     % numel - METHOD Overloaded numel function
-    function [nNumElem] = numel(mtVar, varargin)
+    function [nNumElem] = numel2(mtVar, varargin)
     % NUMEL Number of elements in an array
     %
-    % Example: m=MappedTensor(rand(10)); numel(m) == prod(size(m))
+    % Example: m=MappedTensor(rand(10)); numel2(m) == prod(size(m))
     
        % - If varargin contains anything, a cell reference "{}" was attempted
        if (~isempty(varargin))
          error('MappedTensor:cellRefFromNonCell', ...
-           '*** MappedTensor: Cell contents reference from non-cell obejct.');
+           '*** MappedTensor: Cell contents reference from non-cell object.');
        end
        
        % - Return the total number of elements in the tensor
@@ -707,7 +712,7 @@ classdef MappedTensor < hgsetget
     % ISSCALAR True if array is a scalar.
     %
     % Example: m=MappedTensor(1); isscalar(m)
-       bIsScalar = numel(mtVar) == 1;
+       bIsScalar = prod(size(mtVar)) == 1;
     end
       
     % ismatrix - METHOD Overloaded ismatrix function
@@ -889,24 +894,7 @@ classdef MappedTensor < hgsetget
     % -   Minus
       error('MappedTensor:NotImplemented', ...
         '*** MappedTensor: ''minus'' (A-B) must be performed on a referenced portion of the tensor, or else explicitly with ''arrayfun''.');
-    end
-
-    %% horzcat, vertcat, cat - METHOD Overloaded concatenation functions (unsupported)
-    function out = horzcat(varargin) %#ok<STOUT,VANUS>
-    % HORZCAT Horizontal concatenation.
-      error('MappedTensor:UnsupportedConcatenation', ...
-        '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
-    end
-    function out = vertcat(varargin) %#ok<VANUS,STOUT>
-    % VERTCAT Vertical concatenation.
-      error('MappedTensor:UnsupportedConcatenation', ...
-        '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
-    end
-    function out = cat(varargin) %#ok<VANUS,STOUT>
-    % CAT Concatenate arrays.
-      error('MappedTensor:UnsupportedConcatenation', ...
-        '*** MappedTensor: Concatenation is not supported for MappedTensor objects.');
-    end      
+    end   
   
     %% saveobj - METHOD Overloaded save mechanism
     function [sVar] = saveobj(mtVar)
