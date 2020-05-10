@@ -14,6 +14,7 @@ if prod(size(a)) > 1e6
 else
   signal = subsref(a, substruct('()', repmat({':'}, 1, ndims(a))));
 end
+signal = squeeze(signal);
 
 if ~isempty(inputname(1))
   iname = inputname(1);
