@@ -4,6 +4,7 @@ function h = fread(m, n)
 %   positive. The returned data H is of type 'uint8', and can be converted to
 %   a string with 'char(H)'.
 
+  if nargin < 2, n=inf; end
   h = [];
   n = min(m.Offset, n); % only in header
   if n <=0, return; end

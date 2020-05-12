@@ -3,7 +3,7 @@ function h = plot(a, varargin)
 %   H = PLOT(M) plots the array M as a vector, matrix/surface, or volume.
 %   Higher dimension tensors plot a projection.
 %
-% Example: h=plot(MappedTensor(rand(100))); close(gcf);
+% Example: h=plot(MappedTensor(rand(100))); close(gcf); 1
 
 h = [];
 

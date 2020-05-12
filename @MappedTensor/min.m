@@ -1,7 +1,16 @@
 function [tfMax, tnMaxIndices] = min(mtVar, varargin)
 % MIN    Smallest component.
+%   MIN(X) is a row vector containing the minimum element along the first
+%   non-singleton dimension.
 %
-% See also: min
+%   [Y,I] = MIN(X) returns the indices of the minimum values in vector I.
+%
+%   MIN(X,Y) returns an array the same size as X and Y with the
+%   smallest elements taken from X or Y. Either one can be a scalar.
+%
+%   [Y,I] = MIN(X,[],DIM) operates along the dimension DIM.
+%
+% Example: m=MappedTensor(eye(5)); all(min(m) == 0)
 
   % - Check arguments
   if (nargin > 3)

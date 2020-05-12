@@ -1,6 +1,33 @@
 function [mtVar] = subsasgn(mtVar, S, tfData)
-  % SUBSASGN Subscripted assignment
+% SUBSASGN Subscripted assignment
+%   A(I) = B assigns the values of B into the elements of A specified by
+%   the subscript vector I.  B must have the same number of elements as I
+%   or be a scalar. For multi-dimensional arrays, syntax is M(I,J,..) = B.
+%
+%   The special syntax A(:) = B assigns all values of the tensor as B.
+%
+%   A.field = B assigns value B to the object property 'field'.
+%
+%   
 
+  % handle array of objects
+  if numel(mtVar) > 1
+    if strcmp(S.type,'()')
+      builtin('subasgn', mtVar, S, tfData);
+      return
+    else
+      for index=1:numel(mtVar)
+        subasgn(mtVar(index), S, tfData);
+      end
+      return
+    end
+  end
+
+  if strcmp(S.type,'.')
+    mtVar = builtin('subsasgn', mtVar, S, tfData);
+    return
+  end
+  
   % Test for valid subscripts
   cellfun(@isvalidsubscript, S.subs);
 

@@ -9,6 +9,8 @@ function [tFinalSum] = sum(mtVar, varargin)
 %
 %   S = SUM(..., 'native) accumulate S natively and S has the same class
 %   as M.
+%
+% Example: m=MappedTensor(rand(10)); sum(m)
 
    % - Get tensor size
    vnTensorSize = size(mtVar);

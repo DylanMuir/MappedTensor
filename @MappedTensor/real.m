@@ -1,12 +1,12 @@
 function s = real(self, varargin)
-% REAL   Complex real part.
+% REAL   Real part. (unary op)
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(real(m))
 % See also: real
 
 if nargout
-  s = unary(self, 'real', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'real', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end

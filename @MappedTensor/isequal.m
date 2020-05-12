@@ -1,12 +1,7 @@
 function s = isequal(m1, m2, varargin)
-% ISEQUAL True if arrays are numerically equal.
+% ISEQUAL True if arrays are numerically equal. (binary op)
 %
-% Example: m=MappedTensor(rand(100)); n=MappedTensor(rand(100)); ~isempty(isequal(m,n))
+% Example: m=MappedTensor(rand(100)); n=copyobj(m); tf=isequal(m,n)
 % See also: isequal
 
-if nargout
-  s = binary(m1,m2, 'isequal', 'InPLace', false, varargin{:});
-else
-  binary(m1,m2, 'isequal', varargin{:}); % in-place operation
-  s = m1;
-end
+s = binary(m1,m2, mfilename, varargin{:}, 'InPlace', false);

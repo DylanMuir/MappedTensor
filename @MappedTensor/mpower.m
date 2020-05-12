@@ -1,12 +1,12 @@
 function s = mpower(m1, m2, varargin)
-% ^   Matrix power.
+% ^   Matrix power. (binary op)
 %
-% Example: m=MappedTensor(rand(100)); n=MappedTensor(rand(100)); ~isempty(mpower(m,n))
+% Example: m=MappedTensor(rand(10,10,10)); ~isempty(mpower(m,2))
 % See also: mpower
 
 if nargout
-  s = binary(m1,m2, 'mpower', 'InPLace', false, varargin{:});
+  s = binary(m1,m2, mfilename, varargin{:}, 'InPlace', false);
 else
-  binary(m1,m2, 'mpower', varargin{:}); % in-place operation
+  binary(m1,m2, mfilename, varargin{:}); % in-place operation
   s = m1;
 end

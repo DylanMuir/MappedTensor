@@ -1,5 +1,5 @@
 function r = runtest(s, m, option)
-% RUNTEST run a set of tests on object methods
+% RUNTEST runs a set of tests on object methods
 %   RUNTEST(s) checks all object methods. In deployed versions, only the 'test'
 %   functions can be used, whereas from Matlab, the header Example: lines can be
 %   used for testing. The test functions must be named 'test_<class>_<method>'.
@@ -71,6 +71,7 @@ function r = runtest_dotest(s, m)
     % check if code is valid (not in deployed). 
     % Must be convertible to pcode (in temporary dir)
     if ~isdeployed
+      if isempty(which([ class(s) '/' m{mindex} ])), continue; end
       pw = pwd;
       p = tempname; mkdir(p); cd(p)
       failed = [];

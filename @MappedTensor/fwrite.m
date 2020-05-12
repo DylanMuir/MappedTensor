@@ -11,10 +11,10 @@ function h = fwrite(m, buf)
   if n <=0, return; end
   buf = buf(1:n);
 
-  [fid,message] = fopen(m.Filename, 'r');
+  [fid,message] = fopen(m.Filename, 'ab');
   if fid < 0
     disp(message);
     error([ mfilename ': invalid file ' m.Filename ])
   end
-  h = fwrite(fid, buf);
+  h = fwrite(fid, buf,'uint8');
   fclose(fid);

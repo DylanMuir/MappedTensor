@@ -1,7 +1,16 @@
 function [tfMax, tnMaxIndices] = max(mtVar, varargin)
 % MAX    Largest component.
+%   MAX(X) is a row vector containing the maximum element along the first
+%   non-singleton dimension.
 %
-% See also: max
+%   [Y,I] = MAX(X) returns the indices of the maximum values in vector I.
+%
+%   MAX(X,Y) returns an array the same size as X and Y with the
+%   smallest elements taken from X or Y. Either one can be a scalar.
+%
+%   [Y,I] = MAX(X,[],DIM) operates along the dimension DIM.
+%
+% Example: m=MappedTensor(eye(5)); all(max(m) == 1)
 
    % - Check arguments
    if (nargin > 3)

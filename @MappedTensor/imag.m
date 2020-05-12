@@ -1,12 +1,12 @@
 function s = imag(self, varargin)
-% IMAG   Complex imaginary part.
+% IMAG   Complex imaginary part. (unary op)
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(imag(m))
 % See also: imag
 
 if nargout
-  s = unary(self, 'imag', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'imag', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end

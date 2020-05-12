@@ -1,12 +1,12 @@
 function s = median(self, varargin)
-% MEDIAN Median value.
+% MEDIAN Median value. (unary op)
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(median(m))
 % See also: median
 
 if nargout
-  s = unary(self, 'median', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'median', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end

@@ -14,6 +14,8 @@ function s = reducevolume(a, R)
 %   B = REDUCEVOLUME(A)
 %     When omitted, the volume/size reduction is performed on bigger axes until
 %     the final array contains less than 1e6 elements.
+%
+%  Example: m=MappedTensor([500,500,500],'Format','uint8'); prod(size(reducevolume(m))) < 2e6
 
 % rebinning object so that its number of elements is smaller 
 

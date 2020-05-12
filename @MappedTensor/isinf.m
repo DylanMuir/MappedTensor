@@ -1,12 +1,12 @@
 function s = isinf(self, varargin)
-% ISINF  True for infinite elements.
+% ISINF  True for infinite elements. (unary op) 
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(isinf(m))
 % See also: isinf
 
 if nargout
-  s = unary(self, 'isinf', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'isinf', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end

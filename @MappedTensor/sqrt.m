@@ -1,12 +1,12 @@
 function s = sqrt(self, varargin)
-% SQRT   Square root.
+% SQRT   Square root. (unary op)
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(sqrt(m))
 % See also: sqrt
 
 if nargout
-  s = unary(self, 'sqrt', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'sqrt', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end

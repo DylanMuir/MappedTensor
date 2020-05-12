@@ -1,12 +1,12 @@
 function s = isfinite(self, varargin)
-% ISFINITE True for finite elements.
+% ISFINITE True for finite elements. (unary op)
 %
 % Example: m=MappedTensor(rand(100)); ~isempty(isfinite(m))
 % See also: isfinite
 
 if nargout
-  s = unary(self, 'isfinite', 'InPLace', false, varargin{:});
+  s = unary(self, mfilename, varargin{:}, 'InPlace', false);
 else
-  unary(self, 'isfinite', varargin{:}); % in-place operation
+  unary(self, mfilename, varargin{:}); % in-place operation
   s = self;
 end
