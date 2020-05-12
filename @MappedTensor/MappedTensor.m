@@ -6,8 +6,8 @@
 %    copy the handle and not the data.  Modifying one array will modify all the
 %    copies.
 %
-%    The ARRAYEFUN method can then be used to treat data per chunks that fit in 
-%    memory.
+%    The ARRAYFUN and ARRAFUN2 methods can then be used to treat data per chunks
+%    that fit in memory.
 %
 %    M = MAPPEDTENSOR([dim1 dim2...], ...)
 %    M = MAPPEDTENSOR(dim1, dim2, ...)
@@ -35,9 +35,15 @@
 %    etc.). All property name arguments must be quoted strings (e.g.,
 %    'writable'). Any properties that are not specified are given their default
 %    values.
+%
+%    Note: When a variable containing a MAPPEDTENSOR object goes out of scope
+%    or is otherwise cleared, the memory map is automatically closed.
+%    You may also call the DELETE method to force clear the object.
 % 
-%    Property/Value pairs and descriptions:
-%    ======================================
+%    Tensor properties (at build on later)
+%    =====================================
+%
+%    These properties can be set at build stage.
 % 
 %        Format: Char string (defaults to 'double').
 %            Format of the contents of the mapped region. 
@@ -69,18 +75,6 @@
 %            When saving an object, the Temporary state is set to false.
 %            This property can be changed after object creation.
 %
-%        TempDir: Directory path
-%            Directory where the mapped file(s) should stored. The default path
-%            is e.g. TMPDIR or /tmp. You may also use /dev/shm on Linux systems
-%            to map the file into memory.
-%
-%        MachineFormat: big-endian ('ieee-be') or little-endian ('ieee-le')
-%            If not specified, the machine-native format will be used.
-%
-%        Like: array
-%            Specified array dimension and class is used to preallocate a new
-%            object. Note that sparse arrays are not supported.
-%
 %        Data: array
 %            Array to assign to the mapped object.
 %            This property can be changed after object creation.
@@ -89,9 +83,13 @@
 %              M(:)            = whole_array;
 %              M([ 1 3 5... ]) = slice; 
 %
-%        Size: [d1 d2 ...] array
-%            Vector which specifies the size of the mapped array.
-% 
+%        Filename: Char array.
+%            Contains the name of the file being mapped. You can also get the
+%            mapped file with FILEPARTS.
+%
+%        MachineFormat: big-endian ('ieee-be') or little-endian ('ieee-le')
+%            If not specified, the machine-native format will be used.
+%
 %    All the properties above may also be accessed after the MAPPEDTENSOR object
 %    has been created with the GET method. The Writable, Temporary, Data properties 
 %    can be changed with the SET method. For example,
@@ -99,27 +97,21 @@
 %        set(M, 'Writable', true); % or M.Writable = true;
 %  
 %    changes the Writable property of M to true.
-% 
-%    Two properties which may not be specified to the MAPPEDTENSOR constructor as
-%    Property/Value pairs are listed below. These may be accessed (with
-%    dot-subscripting) after the MAPPEDTENSOR object has been created.
-% 
-%        Data: Numeric array or structure array.
-%            Contains the actual memory-mapped data from FILENAME. If Format is a
-%            char string, then Data is a simple numeric array of the type
-%            specified by Format.
-%            You can also set the Data with syntax: 
-%              set(M, 'Data', array)
-%              M(:)            = whole_array;
-%              M([ 1 3 5... ]) = slice; 
-% 
-%        Filename: Char array.
-%            Contains the name of the file being mapped. You can also get the
-%            mapped file with FILEPARTS.
-% 
-%    Note that when a variable containing a MAPPEDTENSOR object goes out of scope
-%    or is otherwise cleared, the memory map is automatically closed.
-%    You may also call the DELETE method to force clear the object.
+%
+%    Additional properties at build stage only
+%    =========================================
+%
+%        TempDir: Directory path
+%            Directory where the mapped file(s) should stored. The default path
+%            is e.g. TMPDIR or /tmp. You may also use /dev/shm on Linux systems
+%            to map the file into memory.
+%
+%        Like: array
+%            Specified array dimension and class is used to preallocate a new
+%            object. Note that sparse arrays are not supported.
+%
+%        Size: [d1 d2 ...] array
+%            Vector which specifies the size of the mapped array.
 %
 %    Note: MappedTensor provides an accelerated MEX function for performing
 %    file reads and writes.  MappedTensor will attempt to compile this
@@ -152,6 +144,11 @@
 %    To work efficiently on very large arrays, it is recommended to employ the
 %    ARRAYFUN method, which applies a function FUN along a given dimension. This
 %    is done transparently for many unary and binary operators.
+%
+%    The NUMEL method returns 1 on a single object, and the number of elements
+%    in vectors of objects. To get the number of elements in a single object, 
+%    use PROD(SIZE(M)). This behaviour allows most methods to be vectorized on
+%    sequences on tensors.
 % 
 %    Examples:
 %    =========
