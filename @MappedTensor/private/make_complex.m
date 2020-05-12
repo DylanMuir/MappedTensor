@@ -11,14 +11,14 @@ function make_complex(mtVar)
     % - create temporary storage for the complex part of the tensor
     if (~mtVar.Temporary)
         warning('MappedTensor:NoPermanentComplexStorage', ...
-           '--- MappedTensor: Warning: The complex part of a tensor is always stored temporarily.');
+           'MappedTensor: Warning: The complex part of a tensor is always stored temporarily.');
     end
 
     % - make enough space for a tensor
     mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
 
     % - open the file
-    mtVar.hCmplxContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.strCmplxFilename, mtVar.strMachineFormat);
+    mtVar.hCmplxContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.strCmplxFilename, mtVar.MachineFormat);
 
     % - record that the tensor has a complex part
     mtVar.bIsComplex = true;

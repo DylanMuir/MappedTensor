@@ -21,8 +21,9 @@ case {'eq','ge','gt','ldivide','le','lt','and','or','xor',...
   % pure binary operators without argument, and not changing slice shape.
   
 case 'isequal'
-  varg = { 'SliceSize', ones(1,ndims(a)) }; % each isequal(slice) is a scalar
-  op = @(s1,s2,n)feval(op, s1, s2, varargin{:}); % ignore slice index, use vector
+  % each isequal(slice) is a scalar
+  varg = { 'SliceSize', ones(1,ndims(a)), 'InPlace',false }; 
+  op = @(s1,s2,n, varargin)feval(op, s1, s2, varargin{:}); % ignore slice index, use vector
   flag_newarray = true;
 
 otherwise
@@ -61,16 +62,16 @@ for index=1:numel(ops)
   % write m-code
   fid = fopen([ op '.m' ], 'w');
   fprintf(fid, 'function s = %s(m1, m2, varargin)\n', op);
-  fprintf(fid, '%% %s\n', h); % first line of help
+  fprintf(fid, '%% %s (binary op)\n', h); % first line of help
   fprintf(fid, '%%\n');
   fprintf(fid, '%% Example: m=%s(rand(100)); n=%s(rand(100)); ~isempty(%s(m,n))\n', ...
     'MappedTensor', 'MappedTensor', op);
   fprintf(fid, '%% See also: %s\n', op);
   fprintf(fid, '\n');
   fprintf(fid, 'if nargout\n');
-  fprintf(fid, '  s = binary(m1,m2, ''%s'', ''InPLace'', false, varargin{:});\n', op);
+  fprintf(fid, '  s = binary(m1,m2, mfilename, varargin{:}, ''InPlace'', false);\n');
   fprintf(fid, 'else\n');
-  fprintf(fid, '  binary(m1,m2, ''%s'', varargin{:}); %% in-place operation\n', op);
+  fprintf(fid, '  binary(m1,m2, mfilename, varargin{:}); %% in-place operation\n');
   fprintf(fid, '  s = m1;\n');
   fprintf(fid, 'end\n');
   fclose(fid);

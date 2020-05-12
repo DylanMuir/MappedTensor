@@ -7,7 +7,7 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
            strCWD = cd(fullfile(strMTDir, 'private'));
            
            % - Try to compile the MEX functions
-           disp([ '--- MappedTensor: Compiling MEX functions in ' fullfile(strMTDir, 'private') ]);
+           disp([ 'MappedTensor: Compiling MEX functions in ' fullfile(strMTDir, 'private') ]);
            try
              mex('mapped_tensor_shim.c', '-largeArrayDims', '-O');
              mex('mapped_tensor_repsum.c', '-largeArrayDims', '-O');
@@ -28,7 +28,7 @@ function [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles
     else
         % - Just use the slow matlab version
         warning('MappedTensor:MEXCompilation', ...
-           '--- MappedTensor: Could not compile MEX functions.  Using slow matlab versions.');
+           'MappedTensor: Could not compile MEX functions.  Using slower Matlab versions.');
         
         hShimFunc = @mapped_tensor_shim_nomex;
         hRepSumFunc = @mapped_tensor_repsum_nomex;
