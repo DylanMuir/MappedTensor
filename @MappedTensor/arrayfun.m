@@ -1,10 +1,12 @@
 function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin) 
   % ARRAYFUN Apply a function on the entire array, in slices.
   %   ARRAYFUN(M, FUN, ...) applies the function specified by FUN.
-  %   Each slice is passed individually to FUN, along with the slice index and
-  %   any trailing arguments (...).
+  %   Each slice in M is passed individually to FUN, along with the slice index
+  %   and any trailing arguments (...).
   %   The major advantage of ARRAYFUN is a reduced memory usage.
   %   Without output argument, the initial array is updated with the new value.
+  %   ARRAYFUN works both with M being a single array, but also with M given as
+  %   a vector of arrays [ M1 M2...].
   %
   %   The function FUN syntax is:
   %
@@ -65,10 +67,31 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   %     arrayfun(M, @(x, n)(x .* rand*n), 3);
   %       scales each slice along 3rd dimension with a single random
   %       number times the slice index.
+  %
+  % Example: m=MappedTensor(rand(100)); arrayfun(m, 'abs')
+
+  % handle array of objects
+  if numel(mtVar) > 1
+    mtNewVar = [];
+    for index=1:numel(mtVar)
+      this = arrayfun(mtVar(index), fhFunction, varargin{:});
+      if isa(this, 'MappedTensor')
+        if isempty(mtNewVar), mtNewVar = this;
+        else mtNewVar = [ mtNewVar this ]; end
+      else
+        if isempty(mtNewVar)
+          mtNewVar = { this };
+        else
+          mtNewVar{end+1} = this;
+        end
+      end
+    end
+    return
+  end
 
   % defaults
   nSliceDim = []; vnSliceSize = []; bWriteOnly = false; bVerbose = false;
-  bEarlyReturn = false; bInPlace = true;
+  bEarlyReturn = false; bInPlace = (nargout == 0);
 
   % - Shall we generate a new tensor?
   bNewTensor = false;
@@ -113,9 +136,9 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
     % we search for the last dimension, for which the lower chunk dimensions fit
     % in 1/4-th of free memory
     [~,~,sys] = version(mtVar);
-    max_sz = sys.free/4*1024; % in B
+    max_sz = sys.free/4*1024; % in Bytes
     for d=ndims(mtVar):-1:1
-      sz = vnTensorSize;
+      sz = size(mtVar);
       sz(d) = [];
       if prod(sz)*(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset) <= max_sz
         nSliceDim = d; break;
@@ -125,7 +148,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
       nSliceDim = length(vnTensorSize); % use last dimension
     end
     if bVerbose
-      fprintf(1, '--- MappedTensor/arrayfun: Using Dimension=%i\n', nSliceDim);
+      fprintf(1, 'MappedTensor/arrayfun: Using Dimension=%i\n', nSliceDim);
     end
   end
 
@@ -147,9 +170,9 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
     
     % - Display a warning if the output of this command is likely to be
     % lost
-    if (nargout == 0) || bInPlace
+    if bInPlace
        warning('MappedTensor:LostSliceOutput', ...
-          '--- MappedTensor: arrayfun: The output of a arrayfun command is likely to be thrown away...');
+          'MappedTensor: arrayfun: The output of a arrayfun command is likely to be thrown away...');
     end
   end
 
@@ -162,7 +185,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
   end
 
   % - If an explicit return argument is requested, construct a new tensor
-  if (nargout == 1) || ~bInPlace
+  if ~bInPlace
     bNewTensor = true;
   end
 
@@ -223,7 +246,7 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
 
   % - Slice up along specified dimension
   if bVerbose
-   fprintf(1, '--- MappedTensor/arrayfun: [%6.2f%%]', 0);
+   fprintf(1, 'MappedTensor/arrayfun: [%6.2f%%]', 0);
   end
   
   for (nIndex = 1:vnTensorSize(nSliceDim))
