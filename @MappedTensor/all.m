@@ -5,3 +5,5 @@ function s = all(self, varargin)
 % See also: all
 
 s = unary(self, mfilename, varargin{:}, 'InPlace', false);
+
+s = all(subsref(s, substruct('()', repmat({':'}, 1, ndims(s)))));

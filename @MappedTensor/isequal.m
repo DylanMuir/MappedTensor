@@ -5,3 +5,5 @@ function s = isequal(m1, m2, varargin)
 % See also: isequal
 
 s = binary(m1,m2, mfilename, varargin{:}, 'InPlace', false);
+
+s = all(subsref(s, substruct('()', repmat({':'}, 1, ndims(s)))));

@@ -54,7 +54,7 @@ case 'norm'
   
 case 'all'
   % all requires to test the whole tensor.
-  % any could be restricted to test until true and then break.
+  % any is restricted to test until true and then break.
   varg = { 'SliceSize', ones(1,ndims(a)), 'InPlace', false }; % each all(slice) is a single scalar
   op = @(s,n,varargin)feval(op, s(:), varargin{:});
   flag_newarray = true;
