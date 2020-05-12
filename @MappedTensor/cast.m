@@ -1,10 +1,12 @@
 function tfData = cast(mtVar, Format, bForce)
 % CAST  Cast a variable to a different data type or class.
+%   B = CAST(A,NEWCLASS) casts A to class NEWCLASS. A must be convertible to
+%   class NEWCLASS. 
 %
-% Usage: tfData = cast(mtVar, Format <, bForce>)
+%   B = CAST(A,NEWCLASS, true) does a full cast in memory and return the actual
+%   data. Beware the size of the tensor.
 %
-% The optional parameter 'bForce'
-%
+% Example: m=MappedTensor(rand(10)); m=cast(m, 'single');
 % See also: cast
 
 
@@ -25,7 +27,7 @@ function tfData = cast(mtVar, Format, bForce)
    % - Cast the object
    if (bForce)
       warning('MappedTensor:WholeTensor', ...
-         '--- MappedTensor: Warning: This command will allocate memory for the entire tensor!');
+         'MappedTensor: Warning: This command will allocate memory for the entire tensor!');
       
       sSubs = substruct('()', repmat({':'}, numel(size(mtVar)), 1));
       tfData = builtin('cast', subsref(mtVar, sSubs), Format);
