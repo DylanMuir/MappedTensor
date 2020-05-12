@@ -3,10 +3,16 @@ function h = plot(a, varargin)
 %   H = PLOT(M) plots the array M as a vector, matrix/surface, or volume.
 %   Higher dimension tensors plot a projection.
 %
-% Example: b=plot(MappedTensor(rand(100));
+% Example: h=plot(MappedTensor(rand(100))); close(gcf);
 
-% test if further arguments are iFuncs
 h = [];
+
+% handle ndims > 3
+if ndims(a) > 3
+  for n=4:ndims(a)
+    signal = sum(signal, n);
+  end
+end
 
 % evaluate the model value, and axes
 if prod(size(a)) > 1e6
@@ -14,7 +20,7 @@ if prod(size(a)) > 1e6
 else
   signal = subsref(a, substruct('()', repmat({':'}, 1, ndims(a))));
 end
-signal = squeeze(signal);
+signal = squeeze(double(signal));
 
 if ~isempty(inputname(1))
   iname = inputname(1);
@@ -45,7 +51,7 @@ end
 
 % ------------------------------------------------------------------------------
 % simple plot of the array
-function h=iFunc_plot(name, signal)
+function h=iFunc_plot(name, signal, varargin)
 % this internal function plots a single model, 1D, 2D or 3D.
 h=[];
 if isempty(signal) || isscalar(signal)
@@ -53,22 +59,16 @@ if isempty(signal) || isscalar(signal)
   return
 elseif isvector(signal)
   if all(~isfinite(signal)) signal = zeros(size(signal)); end
-  h = plot(signal);
+  h = plot(signal,varargin{:});
 elseif ndims(signal) == 2
-  h = surf(signal);
+  h = surf(signal,varargin{:});
   view(3)
   set(h,'EdgeColor','None');
 elseif ndims(signal) == 3
-  h =patch(isosurface(signal, mean(signal(:))));
+  h =patch(isosurface(signal, mean(signal(:)),varargin{:}));
   set(h,'EdgeColor','None','FaceColor','green'); alpha(0.7);
   light
   view(3)
-else
-  % reduce dimensionality to 3
-  for n=4:ndims(a)
-    signal = sum(signal, n);
-  end
-  h=iFunc_plot(name, signal); % call now with 3d...
 end
 
 set(h, 'DisplayName', name);
