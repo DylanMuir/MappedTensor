@@ -96,7 +96,7 @@
 %    has been created with the GET method. The Writable, Temporary, Data properties 
 %    can be changed with the SET method. For example,
 % 
-%        set(M, 'Writable', true);
+%        set(M, 'Writable', true); % or M.Writable = true;
 %  
 %    changes the Writable property of M to true.
 % 
@@ -121,37 +121,37 @@
 %    or is otherwise cleared, the memory map is automatically closed.
 %    You may also call the DELETE method to force clear the object.
 %
+%    Note: MappedTensor provides an accelerated MEX function for performing
+%    file reads and writes.  MappedTensor will attempt to compile this
+%    function when a MappedTensor variable is first created.  This requires
+%    mex to be configured correctly for your system.  If compilation fails,
+%    then a slower pure Matlab version will be used.
+%
 %    Using the array:
 %    ================
 %
 %    The MAPPEDTENSOR array can be used in most cases just as a normal Matlab
 %    array, as many class methods have been defined to match the usual behaviour.
 %
-%    Binary plus (A+B) and minus (A-B) are not supported, since they require a 
-%    full load of the tensor to be implemented. Perform addition or subtraction 
-%    on a referenced portion of the tensor, or use ARRAYFUN to perform the 
-%    operation.
-%    Multiplication using times (A*B, A.*B) is supported as long as one of A
-%    or B is a scalar.  Divide (A/B, A./B, B\A, B.\A) is supported, as long as
-%    B is a scalar.
+%    Most standard Matlab operators just work transparently with MAPPEDTENSOR.
+%    You may use single objects, and even array of tensors for a vectorized
+%    processing, such as in:
+%
+%      m=MappedTensor(rand(100)); n=copyobj(m); p=2*[m n];
+%
+%    These objects contain a reference to the actual data. Defining n=m actually
+%    access the same data. To make a copy, use the COPYOBJ method.
 %
 %    Transparent casting to other classes is supported in O(1) time. Note that
 %    due to transparent casting and tranparent O(1) scaling, rounding may
 %    occur in a different class to the returned data, and therefore may not
 %    match Matlab rounding precisely. If this is an issue, index the tensor
 %    and then scale the returned values rather than rely on O(1) scaling of
-%     the entire tensor.
-%
-%    Save and load are minimally supported -- data is NOT saved, but on load a new
-%    mapped tensor will be generated and filled with zeros.  Both save and load
-%    generate warnings.
-%
-%    Dot referencing ('.') is not supported. Properties can be accessed with GET.
-%
-%    Summation, MIN and MAX are supported with same syntax as the usual.
+%    the entire tensor.
 %
 %    To work efficiently on very large arrays, it is recommended to employ the
-%    ARRAYFUN method, which applies a function FUN along a given dimension.
+%    ARRAYFUN method, which applies a function FUN along a given dimension. This
+%    is done transparently for many unary and binary operators.
 % 
 %    Examples:
 %    =========
@@ -162,12 +162,15 @@
 %        % To reuse a previously existing mapped file:
 %        m = MAPPEDTENSOR('records.dat', [100 100 100], ...
 %              'format','double', 'writable', true);
-%        m(:) = rand(100, 100, 100);
+%        m(:) = rand(100, 100, 100);  % assign new data
 %        m(1:2:end) = 0;
+%
+%    Example: m = MappedTensor(rand(100,100))
 %
 %    Note: m = rand(100, 100, 100); would over-write the mapped tensor with a 
 %    standard matlab tensor.  To assign to the entire tensor you must use
-%    colon referencing: m(:) = ... or set(m, 'Data', ...)
+%    colon referencing: m(:) = ... or set(m, 'Data', ...). For very large arrays
+%    it is safer to assign data slice-per-slice.
 %
 %    Credits:
 %    ========
@@ -183,97 +186,30 @@
 %    See also MEMMAPFILE, MAPPEDTENSOR/arrayfun, MAPPEDTENSOR/get, 
 %    MAPPEDTENSOR/subsasgn, MAPPEDTENSOR/subsref.
 
-%
-% Convenience functions:
-%    arrayfun: Execute a function on the entire tensor, by slicing it along
-%       a specified dimension, and store the results back in the tensor.  
-%
-%       Usage: [<mtNewVar>] = arrayfun(mtVar, fhFunctionHandle, nSliceDim <, vnSliceSize,> ...)
-%
-%           'mtVar' is a MappedTensor.  This tensor will be sliced up along
-%           dimensions 'nSliceDim', with each slice passed individually to
-%           'fhFunctionHandle', along with the slice index and any trailing
-%           argments (...).  If no return argument is supplied, the results
-%           will be stored back in 'mtVar'.  If a return argument is
-%           supplied, a new MappedTensor will be created to contain the
-%           results.  The optional argument 'vnSliceSize' can be used to
-%           call a function that returns a different sized output than the
-%           size of a single slice of 'mtVar'. In that case, a new tensor
-%           'mtNewVar' will be generated, and it will have the size
-%           'vnSliceSize', with the dimension 'nSliceDim' having the same
-%           length as in the original tensor 'mtVar'.
-%
-%           The major advantage of arrayfun is a reduced memory usage.
-%
-%           "Slice assign" operations can be performed by passing in a function
-%           that takes no input arguments for 'fhFunctionHandle'.
-%
-%           Note that due to Matlab not making available the number of
-%           return arguments that an anonymous function delivers, all
-%           functions passed to arrayfun must return AT LEAST ONE
-%           argument.
-%
-%       For example:
-%
-%       mtVar(:) = abs(fft2(mtVar(:, :, :)));
-%
-%          is equivalent to
-%
-%       arrayfun(mtVar, @(x)(abs(fft2(x)), 3);
-%
-%       Each slice of the third dimension of mtVar, taken in turn, is passed to
-%       fft2 and the result stored back into the same slice of mtVar.
-%
-%       mtVar2 = arrayfun(mtVar, @(x)(fft2(x)), 3);
-%
-%       This will return the result in a new MappedTensor, with temporary
-%       storage.
-%
-%       mtVar2 = arrayfun(mtVar, @(x)(sum(x)), 3, [1 10 1]);
-%
-%       This will create a new MappedTensor with size [1 10 N], where 'N' is
-%       the length along dimension 3 of 'mtVar'.
-%
-%       arrayfun(mtVar, @()(randn(10, 10)), 3);
-%
-%       This will assign random numbers to each slice of 'mtVar' independently.
-%
-%       arrayfun(mtVar, @(x, n)(x .* vfFactor(n)), 3);
-%
-%       The second argument to the function is passed the index of the
-%       current slice.  This line will multiply each slice in mtVar by a
-%       scalar corresponding to that slice index.
-%
-%    fileparts: get the mapped filename (real and complex parts).
-%       [file_real, file_imag] = fileparts(mtVar);
-%
-% Note: MappedTensor provides an accelerated MEX function for performing
-% file reads and writes.  MappedTensor will attempt to compile this
-% function when a MappedTensor variable is first created.  This requires
-% mex to be configured correctly for your system.  If compilation fails,
-% then a slower matlab version will be used.
-
 % Author: Dylan Muir <dylan@ini.phys.ethz.ch>
 % Created: 19th November, 2010
 %
 % Thanks to @marcsous (https://github.com/marcsous) for bug reports and
 % fixes.
+%
+% revamped by E. Farhi <emmanuel.farhi@synchrotron-soleil.fr>, May 2020.
 
 classdef MappedTensor < hgsetget
   properties % public, in sync with memmapfile
     Filename;             % Binary data file on disk (real part of tensor)
+    strCmplxFilename;       % Binary data file on disk (complex part of tensor)
     Format   = 'double';  % The class of this mapped tensor
     Writable = true;      % Should the data be protected from writing?
     Offset   = 0;         % The number of bytes to skip at the beginning of the file
     Data;                 % The actual Data
+    Temporary=true;       % A flag which records whether a temporary file was created
+    MachineFormat;       % The desired machine format of the mapped file
   end
   
   properties (Access = private)
-    strCmplxFilename;       % Binary data file on disk (complex part of tensor)
     strTempDir;             % Temporary directory used for data files on disk
     hRealContent;           % File handle for data (real part)
     hCmplxContent;          % File handle for data (complex part)
-    Temporary;              % A flag which records whether a temporary file was created by MappedTensor
     strStorageClass;        % The storage class of this tensor on disk
     nClassSize;             % The size of a single scalar element of the storage class, in bytes
     vnDimensionOrder;       % A vector containing the virtual dimension order used for referencing the tensor
@@ -283,21 +219,18 @@ classdef MappedTensor < hgsetget
     bIsComplex = false;     % A boolean indicating the the data has a complex part
     fComplexFactor = 1;     % A factor multiplied by the complex part of the tensor (used for scalar multiplication and negation)
     fRealFactor = 1;        % A factor multiplied by the real part of the tensor (used for scalar multiplication and negation)
-
-    strMachineFormat;       % The desired machine format of the mapped file
     bBigEndian;             % Should the data be stored in big-endian format?
-
     hShimFunc;              % Handle to the (hopefully compiled) shim function
     hRepSumFunc;            % Handle to the (hopefully compiled) repsum function
     hChunkLengthFunc;       % Handle to the (hopefully compiled) chunk length function
-  end
+  end % properties
    
   methods
     %% MappedTensor - CONSTRUCTOR
     function [mtVar] = MappedTensor(varargin)
     % MAPPEDTENSOR Build an array mapped onto a file.
     %
-    % Example: m = Mappedtensor(rand(100,100)); isa(m, 'MappedTensor')
+    % Example: m = MappedTensor(rand(100,100))
 
       % MAPPEDTENSOR Get a handle to the appropriate shim function (should be done
       %     before any errors are thrown)
@@ -311,6 +244,7 @@ classdef MappedTensor < hgsetget
       vnTensorSize = [];
       while (nArg <= numel(varargin))
         if (ischar(varargin{nArg}))
+
           switch(lower(varargin{nArg}))
           case {'class','format'}
             % - A non-default class was specified
@@ -332,7 +266,7 @@ classdef MappedTensor < hgsetget
              
           case {'machineformat'}
             % - The machine format was specifed
-            mtVar.strMachineFormat = varargin{nArg+1};
+            mtVar.MachineFormat = varargin{nArg+1};
             vbKeepArg(nArg:nArg+1) = false;
             nArg = nArg + 1;
              
@@ -401,16 +335,40 @@ classdef MappedTensor < hgsetget
             nArg = nArg + 1;
             
           case 'persistent'
-            % - Persisten (not temporary) status was specified
+            % - Persistent (not temporary) status was specified
             mtVar.Temporary = ~logical(varargin{nArg+1});
             vbKeepArg(nArg:nArg+1) = false;
             nArg = nArg + 1;
             
-          case 'size'
+          case {'size','dimension'}
             % - Size was specified
             vnTensorSize = varargin{nArg+1};
             vbKeepArg(nArg:nArg+1) = false;
             nArg = nArg + 1;
+
+          case 'filename'
+            if ischar(varargin{nArg+1})
+              if ~isempty(dir(varargin{nArg+1}))
+                mtVar.Filename = varargin{nArg+1};
+              else
+                error([ mfilename ' file ' varargin{nArg+1} ' is missing.' ])
+              end
+            end
+            vbKeepArg(nArg:nArg+1) = false;
+            nArg = nArg + 1;
+            mtVar.Temporary = false;
+
+          case {'filename_complex','strcmplxfilename' }
+            if ischar(varargin{nArg+1})
+              if ~isempty(dir(varargin{nArg+1}))
+                mtVar.strCmplxFilename = varargin{nArg+1};
+              else
+                error([ mfilename ' file ' varargin{nArg+1} ' is missing.' ])
+              end
+            end
+            vbKeepArg(nArg:nArg+1) = false;
+            nArg = nArg + 1;
+            mtVar.Temporary = false;
             
           otherwise
             % - No other properties are supported
@@ -451,7 +409,7 @@ classdef MappedTensor < hgsetget
         && all(size(varargin{1})>1)
        mtVar = MappedTensor('Data', varargin{1});
        return
-      else
+      elseif isempty(mtVar.Filename)
         % - Create a temporary file
         mtVar.Temporary = true;
         if isempty(vnTensorSize)
@@ -474,19 +432,19 @@ classdef MappedTensor < hgsetget
       end
 
       % - Make enough space for a temporary tensor
-      if (mtVar.Temporary)
+      if mtVar.Temporary && isempty(mtVar.Filename)
         mtVar.Filename = create_temp_file(prod(vnTensorSize) * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
       end
 
       % - Open the file
-      if (isempty(mtVar.strMachineFormat))
-        [mtVar.hRealContent, mtVar.strMachineFormat] = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename);
+      if (isempty(mtVar.MachineFormat))
+        [mtVar.hRealContent, mtVar.MachineFormat] = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename);
       else
-        mtVar.hRealContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename, mtVar.strMachineFormat);
+        mtVar.hRealContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.Filename, mtVar.MachineFormat);
       end
-        
+
       % - Check machine format
-      switch (lower(mtVar.strMachineFormat))
+      switch (lower(mtVar.MachineFormat))
         case {'ieee-be', 'ieee-be.l64'}
            mtVar.bBigEndian = true;
            
@@ -520,6 +478,15 @@ classdef MappedTensor < hgsetget
     
     function delete(mtVar)
       % DELETE Delete the file, if a temporary file was created for this variable
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          delete(mtVar(index));
+        end
+        return
+      end
+
       try
         % - Close the file handles
         mtVar.hShimFunc('close', mtVar.hRealContent);
@@ -527,30 +494,25 @@ classdef MappedTensor < hgsetget
         if mtVar.bIsComplex
            mtVar.hShimFunc('close', mtVar.hCmplxContent);
         end
-        
-        if ~isempty(mtVar.Filename) && ~isempty(dir(mtVar.Filename))
-          if mtVar.Temporary
-             % - Really delete the temporary file, don't just put it in the trash
-             strState = recycle('off');
-             delete(mtVar.Filename);
-             recycle(strState);
-          else
-            disp(sprintf('  MappedTensor: keeping file %s containing %s %s with Offset %i', ...
-              mtVar.Filename, mtVar.Format, mat2str(size(mtVar)), mtVar.Offset));
+
+        for f={ mtVar.Filename mtVar.strCmplxFilename }
+          if ~isempty(f{1}) && ischar(f{1}) && ~isempty(dir(f{1}))
+            if mtVar.Temporary
+               % - Really delete the temporary file, don't just put it in the trash
+               strState = recycle('off');
+               delete(f{1});
+               recycle(strState);
+            else
+              disp(sprintf('MappedTensor: keeping file %s containing %s %s with Offset %i', ...
+                f{1}, mtVar.Format, mat2str(size(mtVar)), mtVar.Offset));
+            end
           end
-        end
-        
-        % - Delete the complex storage tensor, if it exists
-        if (mtVar.bIsComplex)
-           strState = recycle('off');
-           delete(mtVar.strCmplxFilename);
-           recycle(strState);
         end
         
       catch mtErr
         % - Die gracefully if we couldn't delete the temporary file
         warning('MappedTensor:Destructor', ...
-           '--- MappedTensor/delete: Could not delete temporary file.\n       Error: %s', mtErr.message);
+           'MappedTensor/delete: Could not delete temporary file.\n       Error: %s', mtErr.message);
            getReport(mtErr)
       end
     end
@@ -581,20 +543,39 @@ classdef MappedTensor < hgsetget
     % NDIMS   Number of dimensions.
     %
     % Example: m=MappedTensor(eye(10)); ndims(m) == 2
-    
-        % - If varargin contains anything, a cell reference "{}" was attempted
-        if (~isempty(varargin))
-            error('MappedTensor:cellRefFromNonCell', ...
-                '*** MappedTensor: Cell contents reference from non-cell obejct.');
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        nDim = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          nDim(index) = ndims(mtVar(index));
         end
-        
-        % - Return the total number of dimensions in the tensor
-        nDim = length(size(mtVar));
+        return
+      end
+    
+      % - If varargin contains anything, a cell reference "{}" was attempted
+      if (~isempty(varargin))
+          error('MappedTensor:cellRefFromNonCell', ...
+              '*** MappedTensor: Cell contents reference from non-cell obejct.');
+      end
+      
+      % - Return the total number of dimensions in the tensor
+      nDim = length(size(mtVar));
     end
 
-    function tf = isempty(self)
+    function tf = isempty(mtVar)
     % ISEMPTY True for empty array.
-      tf = (self.nNumElements == 1 && subsref(self, substruct('()', {1})) == 0);
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tf = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          tf(index) = isempty(mtVar(index));
+        end
+        return
+      end
+      
+      tf = (mtVar.nNumElements == 1 && subsref(mtVar, substruct('()', {1})) == 0);
     end
       
     % numel - METHOD Overloaded numel function
@@ -618,7 +599,17 @@ classdef MappedTensor < hgsetget
     % LENGTH   Length of vector.
     %
     % Example: m=MappedTensor(rand(10,20)); length(m) == 20
-       nLength = max(size(mtVar));
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        nLength = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          nLength(index) = length(mtVar(index));
+        end
+        return
+      end
+      
+      nLength = max(size(mtVar));
     end
       
     % permute - METHOD Overloaded permute function
@@ -626,13 +617,23 @@ classdef MappedTensor < hgsetget
     % PERMUTE Permute array dimensions
     %
     % Example: m=MappedTensor(rand(10,20)); all(size(permute(m,[2 1])) == [20 10])
-       vnCurrentOrder = mtVar.vnDimensionOrder;
-       
-       if (numel(vnNewOrder) > numel(vnCurrentOrder))
-          vnCurrentOrder(end+1:numel(vnNewOrder)) = numel(vnCurrentOrder)+1:numel(vnNewOrder);
-       end
-       
-       mtVar.vnDimensionOrder(1:numel(vnNewOrder)) = vnCurrentOrder(vnNewOrder);
+
+      if nargin < 2, return; end
+      % handle array of objects
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          permute(mtVar(index), vnNewOrder);
+        end
+        return
+      end
+      
+      vnCurrentOrder = mtVar.vnDimensionOrder;
+
+      if (numel(vnNewOrder) > numel(vnCurrentOrder))
+        vnCurrentOrder(end+1:numel(vnNewOrder)) = numel(vnCurrentOrder)+1:numel(vnNewOrder);
+      end
+
+      mtVar.vnDimensionOrder(1:numel(vnNewOrder)) = vnCurrentOrder(vnNewOrder);
     end
       
     % ipermute - METHOD Overloaded ipermute function
@@ -640,8 +641,18 @@ classdef MappedTensor < hgsetget
     % IPERMUTE Inverse permute array dimensions.
     %
     % Example: m=MappedTensor(rand(20,10)); all(size(ipermute(m,[2 1])) == [10 20])
-       vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
-       mtVar = permute(mtVar, vnNewOrder);
+
+      if nargin < 2, return; end
+      % handle array of objects
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          ipermute(mtVar(index),vnOldOrder);
+        end
+        return
+      end
+      
+      vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
+      mtVar = permute(mtVar, vnNewOrder);
     end
     
     function mtVar = reshape(mtVar, varargin)
@@ -649,6 +660,16 @@ classdef MappedTensor < hgsetget
     %   RESHAPE(X,M,N, ...) returns an N-D array with the same
     %   elements as X but reshaped to have the size M-by-N-by-P-by-...
     %   M*N*P*... must be the same as PROD(SIZE(X)).
+
+      if nargin < 2, return; end
+      % handle array of objects
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          reshape(mtVar(index),varargin{:});
+        end
+        return
+      end
+
       vnNewSize = [ varargin{:} ];
       vnOldSize = size(mtVar);
       if prod(vnNewSize) ~= prod(size(mtVar))
@@ -678,13 +699,21 @@ classdef MappedTensor < hgsetget
     %
     % Example: m=MappedTensor(rand(10,20)); all(size(m') == [20 10])
     
-       % - Array-transpose real and complex parts
-       mtVar = transpose(mtVar);
-       
-       % - Negate complex part
-       if (mtVar.bIsComplex)
-          mtVar.fComplexFactor = -mtVar.fComplexFactor;
-       end
+      % handle array of objects
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          ctranspose(mtVar(index));
+        end
+        return
+      end
+
+      % - Array-transpose real and complex parts
+      mtVar = transpose(mtVar);
+
+      % - Negate complex part
+      if (mtVar.bIsComplex)
+        mtVar.fComplexFactor = -mtVar.fComplexFactor;
+      end
     end
       
     % transpose - METHOD Overloaded transpose function
@@ -694,7 +723,13 @@ classdef MappedTensor < hgsetget
     % dimensions unpermuted.
     %
     % Example: m=MappedTensor(rand(10,20)); all(size(m.') == [20 10])
-       mtVar = permute(mtVar, [2 1]);
+      if numel(mtVar) > 1
+        for index=1:numel(mtVar)
+          transpose(mtVar(index));
+        end
+        return
+      end
+      mtVar = permute(mtVar, [2 1]);
     end
       
     % isreal - METHOD Overloaded isreal function
@@ -745,14 +780,6 @@ classdef MappedTensor < hgsetget
        bIsChar = isequal(mtVar.Format, 'char');
     end
       
-    % isnan - METHOD Overloaded isnan function
-    function [tbIsNan] = isnan(mtVar)
-    % ISNAN  True for Not-a-Number.
-    %
-    % Example: m=MappedTensor(rand(10)); m(5)=nan; any(isnan(m))
-       tbIsNan = reshape(isnan(mtVar(:)), size(mtVar));
-    end
-      
     % isfloat - METHOD Overloaded isfloat function
     function [bIsFloat] = isfloat(mtVar)
     % ISFLOAT True for floating point arrays, both single and double.
@@ -772,35 +799,17 @@ classdef MappedTensor < hgsetget
     % strfind - METHOD Overloaded strfind function
     function [nLoc] = strfind(mtVar, varargin) %#ok<INUSD>
       warning('MappedTensor:Unsupported', ...
-        '--- MappedTensor/strfind: Warning: strfind is not supported.');
+        'MappedTensor/strfind: Warning: strfind is not supported.');
       nLoc =[];
     end
       
     % uplus - METHOD Overloaded uplus operator (+mtVar)
     function [mtVar] = uplus(mtVar)
     % +  Unary plus.
+    
        % - ...nothing to do?
     end
-      
-    %% saveobj - METHOD Overloaded save mechanism
-    function [sVar] = saveobj(mtVar)
-    % SAVEOBJ Save filter for objects.
-    
-      % - Generate a structure containing the pertinent properties
-      sVar.Filename = mtVar.Filename;
-      sVar.Temporary = false;
-      sVar.Format = mtVar.Format;
-      sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
-      sVar.vnOriginalSize = mtVar.vnOriginalSize;
-      sVar.Writable = mtVar.Writable;
-      sVar.Offset = mtVar.Offset;
 
-      % - Send a warning about poorly-supported loading
-      warning('MappedTensor:UnsupportedObjectStorage', ...
-        '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
-    end
-   
-      
     %% fileparts - METHOD Return the files that underlie this MappedTensor
     function [Filename, strCmplxFilename] = fileparts(mtVar)
       % FILEPARTS Return the files associated with the data
@@ -811,86 +820,198 @@ classdef MappedTensor < hgsetget
     end
 
     function tfData = char(mtVar)
+      % CHAR Convert tensor representation to character array (string).
+      %
+      % Example: m=MappedTensor('Data',[72 101 108 108 111]); ischar(char(m))
       tfData = cast(mtVar, 'char');
     end
 
     function tfData = int8(mtVar)
+      % INT8 Convert tensor representation to signed 8-bit integer.
+      %
+      % Example: m=MappedTensor('Data','Hello'); isinteger(int8(m))
       tfData = cast(mtVar, 'int8');
     end
 
     function tfData = uint8(mtVar)
+      % UINT8 Convert tensor representation to unsigned 8-bit integer.
+      %
+      % Example: m=MappedTensor('Data','Hello'); isinteger(uint8(m))
       tfData = cast(mtVar, 'uint8');
     end
 
     function tfData = logical(mtVar)
+      % UINT8 Convert tensor representation to logical (true/false).
+      %
+      % Example: m=MappedTensor(eye(5)); islogical(logical(m))
       tfData = cast(mtVar, 'logical');
     end
 
     function tfData = int16(mtVar)
+      % INT16 Convert tensor representation to signed 16-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(int16(m))
       tfData = cast(mtVar, 'int16');
     end
 
     function tfData = uint16(mtVar)
+      % UINT16 Convert tensor representation to unsigned 16-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(uint16(m))
       tfData = cast(mtVar, 'uint16');
     end
 
     function tfData = int32(mtVar)
-       tfData = cast(mtVar, 'int32');
+      % INT32 Convert tensor representation to signed 32-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(int32(m))
+      tfData = cast(mtVar, 'int32');
     end
 
     function tfData = uint32(mtVar)
-       tfData = cast(mtVar, 'uint32');
+      % UINT32 Convert tensor representation to unsigned 32-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(uint32(m))
+      tfData = cast(mtVar, 'uint32');
     end
 
     function tfData = single(mtVar)
+      % SINGLE Convert tensor representation to single precision (float32).
+      %
+      % Example: m=MappedTensor(100*rand(10)); isnumeric(single(m))
       tfData = cast(mtVar, 'single');
     end
 
     function tfData = int64(mtVar)
+      % INT64 Convert tensor representation to signed 64-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(int64(m))
       tfData = cast(mtVar, 'int64');
     end
 
     function tfData = uint64(mtVar)
+      % UINT64 Convert tensor representation to unsigned 64-bit integer.
+      %
+      % Example: m=MappedTensor(100*rand(10)); isinteger(uint64(m))
       tfData = cast(mtVar, 'uint64');
     end
 
     function tfData = double(mtVar)
+      % SINGLE Convert tensor representation to double precision (float64).
+      %
+      % Example: m=MappedTensor(100*rand(10)); isnumeric(double(m))
       tfData = cast(mtVar, 'double');
     end
+      
+    %% saveobj - METHOD Overloaded save mechanism
+    function [sVar] = saveobj(mtVar)
+    % SAVEOBJ Save filter for objects.
+
+      % - Generate a structure containing only the pertinent properties
+      sVar.Filename         = mtVar.Filename;
+      sVar.strCmplxFilename = mtVar.strCmplxFilename;
+      sVar.Temporary        = false;
+      sVar.Format           = mtVar.Format;
+      sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
+      sVar.vnOriginalSize   = mtVar.vnOriginalSize;
+      sVar.Writable         = mtVar.Writable;
+      sVar.Offset           = mtVar.Offset;
+      sVar.MachineFormat    = mtVar.MachineFormat;
+      sVar.Size             = size(mtVar);
+
+      mtVar.Temporary = false; % must keep data
+      
+      disp([ mfilename ': saveobj: please keep file (real)    ' sVar.Filename])
+      if mtVar.bIsComplex && ~isempty(sVar.strCmplxFilename)
+        disp([ mfilename ': saveobj: please keep file (complex) ' sVar.strCmplxFilename])
+      end
+
+    end % saveobj
+
+    function newVar = copyobj(mtVar)
+      % COPYOBJ Make deep copy of array.
+      %
+      % Example: m=MappedTensor(100*rand(10)); n=copyobj(m); isequal(m,n)
+
+      newVar = [];
+      % first we copy the files to new ones.
+      if ~isempty(mtVar.Filename) && ischar(mtVar.Filename) ...
+        && ~isempty(dir(mtVar.Filename))
+        [p,f] = fileparts(mtVar.Filename);
+        newRealFilename = tempname(p);
+        [ex,mess] = copyfile(mtVar.Filename, newRealFilename);
+        if ~ex
+          error([ mfilename ': copyobj: ERROR copying file ' mtVar.Filename ': ' message ])
+        end
+      else return;
+      end
+      if ~isempty(mtVar.strCmplxFilename) && ischar(mtVar.strCmplxFilename) ...
+        && ~isempty(dir(mtVar.strCmplxFilename))
+        [p,f] = fileparts(mtVar.strCmplxFilename);
+        newCmplxFilename = tempname(p);
+        [ex,mess] = copyfile(mtVar.strCmplxFilename, newCmplxFilename);
+        if ~ex
+          error([ mfilename ': copyobj: ERROR copying file ' mtVar.strCmplxFilename ': ' message ])
+        end
+      else newCmplxFilename = [];
+      end
+
+      % then we recreate the object.
+      vnOriginalSize = mtVar.vnOriginalSize; %#ok<PROP>
+      vnOriginalSize(end+1:numel(mtVar.vnDimensionOrder)) = 1; %#ok<PROP>
+     
+      % - Return the size of the tensor data element, permuted
+      vnSize = vnOriginalSize(mtVar.vnDimensionOrder); %#ok<PROP>
+      
+      args = { ...
+        'Filename',         newRealFilename, ...
+        'Filename_Complex', newCmplxFilename, ...
+        'Format',           mtVar.Format, ...
+        'MachineFormat',    mtVar.MachineFormat, ...
+        'Temporary',        mtVar.Temporary, ...
+        'Writable',         mtVar.Writable, ...
+        'Offset',           mtVar.Offset, ...
+        'Size',             vnSize };
+        
+      newVar = MappedTensor(args{:}); % build new object
+
+      newVar.vnOriginalSize   = mtVar.vnOriginalSize;
+      newVar.vnDimensionOrder = mtVar.vnDimensionOrder;
+      
+    end % copyobj
       
   end % methods
       
   methods (Static)
-     %% loadobj - METHOD Overloaded load mechanism
-     function [mtVar] = loadobj(sSavedVar)
-     % LOADOBJ Load filter for objects.
-      
-        % - Put back together arguments used to load the tensor
-        cInputArgs = { ...
-          sSavedVar.vnOriginalSize, ...
-          'Format', sSavedVar.Format, ...
-          'Writable', sSavedVar.Writable, ...
-          'Offset', sSavedVar.Offset ...
-        };
+    %% loadobj - METHOD Overloaded load mechanism
+    function [mtVar] = loadobj(sSavedVar)
+    % LOADOBJ Load filter for objects.
 
-        % - Try to create a new MappedTensor, with the saved parameters
-        if (sSavedVar.Temporary)
-          % - Create a transient mapped tensor
-          mtVar = MappedTensor(cInputArgs{:});
+      if isempty(sSavedVar), mtVar = []; return; end
+      % compute the initial size of object
+      vnOriginalSize = sSavedVar.vnOriginalSize; %#ok<PROP>
+      vnOriginalSize(end+1:numel(sSavedVar.vnDimensionOrder)) = 1; %#ok<PROP>
+     
+      % - Return the size of the tensor data element, permuted
+      vnSize = vnOriginalSize(sSavedVar.vnDimensionOrder); %#ok<PROP>
 
-        else
-          % - Map an existing file on disk
-          mtVar = MappedTensor(sSavedVar.Filename, cInputArgs{:});
-        end
+      args = { ...
+        'Filename',         sSavedVar.Filename, ...
+        'Filename_Complex', sSavedVar.strCmplxFilename, ...
+        'Format',           sSavedVar.Format, ...
+        'MachineFormat',    sSavedVar.MachineFormat, ...
+        'Temporary',        false, ...
+        'Writable',         sSavedVar.Writable, ...
+        'Offset',           sSavedVar.Offset, ...
+        'Size',             vnSize };
+        
+      mtVar = MappedTensor(args{:}); % build new object
 
-        % - Record permutation
-        mtVar.vnDimensionOrder = sSavedVar.vnDimensionOrder;
+      mtVar.vnOriginalSize   = sSavedVar.vnOriginalSize;
+      mtVar.vnDimensionOrder = sSavedVar.vnDimensionOrder;
 
-        % - Send a warning about poorly-supported loading
-        warning('MappedTensor:UnsupportedObjectStorage', ...
-          '--- MappedTensor: Warning: Saving and loaded MappedTensor objects does not preserve object data!');
-      end
-   end % methods (static)
+    end
+  end % methods (static)
       
 end % end classdef MappedTensor
 
