@@ -159,6 +159,24 @@ set(M, 'Writable', true); % or M.Writable = true;
 ```
 changes the Writable property of M to true.
 
+## Loading from data files
+
+The LOAD method allows to lazy import binary data sets with syntax
+```matlab
+m = load(MappedTensor, 'filename');
+```
+
+with the following data formats.
+
+| Extension         | Description               |
+|-------------------|---------------------------|
+| EDF               | ESRF Data Format          |
+| POS               | Atom Probe Tomography     |
+| NPY               | Python NumPy array        |
+| MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
+| MAR               | MAR CCD image             |
+| IMG MCCD          | ADSC X-ray detector image |
+
 ## Using the array
 
 The MappedTensor array can be used in most cases just as a normal Matlab
@@ -272,11 +290,12 @@ A list of available methods is shown below.
 | isnumeric  |  True for numeric arrays. |
 | isreal  |  True for real array. |
 | isscalar  |  True if array is a scalar. |
-Sealed    |  isvalid  |  Test handle validity. |
+|  isvalid  |  Test handle validity. |
 | ldivide  |  .\ Left array divide. (binary op) |
 | le  |  <= Less than or equal. (binary op) |
 | length  |  Length of vector. |
-Static    |  loadobj  |  Load filter for objects. |
+| load | Lazy loading from data files. |
+| loadobj  |  Load filter for objects. |
 | log  |  Natural logarithm. (unary op) |
 | log10  |  Common (base 10) logarithm. (unary op) |
 | logical  |  UINT8 Convert tensor representation to logical (true/false). |
