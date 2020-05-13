@@ -518,7 +518,7 @@ classdef MappedTensor < hgsetget
            'MappedTensor/delete: Could not delete temporary file.\n       Error: %s', mtErr.message);
            getReport(mtErr)
       end
-    end
+    end % delete
 
     function v = get.Data(mtVar)
       v = subsref(mtVar, substruct('()', repmat({':'}, 1, ndims(mtVar))));
@@ -564,10 +564,12 @@ classdef MappedTensor < hgsetget
       
       % - Return the total number of dimensions in the tensor
       nDim = length(size(mtVar));
-    end
+    end % ndims
 
     function tf = isempty(mtVar)
     % ISEMPTY True for empty array.
+    %
+    % Example: m=MappedTensor; isempty(m)
 
       % handle array of objects
       if numel(mtVar) > 1
@@ -583,15 +585,17 @@ classdef MappedTensor < hgsetget
       
     % numel - METHOD Overloaded numel function
     function [nNumElem] = numel2(mtVar, varargin)
-    % NUMEL Number of elements in an array
+    % NUMEL2 Number of elements in an array, same as prod(size)
     %
     % Example: m=MappedTensor(rand(10)); numel2(m) == prod(size(m))
-    
-       % - If varargin contains anything, a cell reference "{}" was attempted
-       if (~isempty(varargin))
-         error('MappedTensor:cellRefFromNonCell', ...
-           '*** MappedTensor: Cell contents reference from non-cell object.');
-       end
+
+      if numel(mtVar) > 1
+        nNumElem = zeros(size(mtVar));
+        for index=1:numel(mtVar)
+          nNumElem(index) = numel2(mtVar(index));
+        end
+        return
+      end
        
        % - Return the total number of elements in the tensor
        nNumElem = mtVar.nNumElements;
@@ -657,42 +661,6 @@ classdef MappedTensor < hgsetget
       vnNewOrder(vnOldOrder) = 1:numel(vnOldOrder);
       mtVar = permute(mtVar, vnNewOrder);
     end
-    
-    function mtVar = reshape(mtVar, varargin)
-    % RESHAPE Reshape array.
-    %   RESHAPE(X,M,N, ...) returns an N-D array with the same
-    %   elements as X but reshaped to have the size M-by-N-by-P-by-...
-    %   M*N*P*... must be the same as PROD(SIZE(X)).
-
-      if nargin < 2, return; end
-      % handle array of objects
-      if numel(mtVar) > 1
-        for index=1:numel(mtVar)
-          reshape(mtVar(index),varargin{:});
-        end
-        return
-      end
-
-      vnNewSize = [ varargin{:} ];
-      vnOldSize = size(mtVar);
-      if prod(vnNewSize) ~= prod(size(mtVar))
-        error([ mfilename ': reshape: number of elements [ M,N,...] must not change.' ]);
-      end
-      mtVar.vnOriginalSize = vnNewSize;
-      
-      if numel(vnNewSize) > numel(vnOldSize)
-        % fill new dimensions, if any, with new DimensionOrder
-        for index=(numel(vnOldSize)+1):numel(vnNewSize)
-          mtVar.vnDimensionOrder(index) = index;
-        end
-      elseif numel(vnNewSize) < numel(vnOldSize)
-        % remove some dimensions
-        for index=(numel(vnNewSize)+1):numel(vnOldSize)
-          mtVar.vnDimensionOrder(mtVar.vnDimensionOrder==index) = 0;
-        end
-        mtVar.vnDimensionOrder = nonzeros(mtVar.vnDimensionOrder);
-      end
-    end
       
     % ctranspose - METHOD Overloaded ctranspose function
     function [mtVar] = ctranspose(mtVar)
@@ -740,7 +708,17 @@ classdef MappedTensor < hgsetget
     % ISREAL True for real array.
     %
     % Example: m=MappedTensor(rand(10,20)); isreal(m)
-       bIsReal = ~mtVar.bIsComplex;
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsReal = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsReal(index) = isreal(mtVar(index));
+        end
+        return
+      end
+      
+      bIsReal = ~mtVar.bIsComplex;
     end
       
     % islogical - METHOD Overloaded islogical function
@@ -748,7 +726,17 @@ classdef MappedTensor < hgsetget
     % ISLOGICAL True for logical array.
     %
     % Example: m=MappedTensor('Data',logical(eye(5))); islogical(m)
-       bIsLogical = isequal(mtVar.Format, 'logical');
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsLogical = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsLogical(index) = islogical(mtVar(index));
+        end
+        return
+      end
+      
+      bIsLogical = isequal(mtVar.Format, 'logical');
     end
       
     % isnumeric - METHOD Overloaded isnumeric function
@@ -756,7 +744,17 @@ classdef MappedTensor < hgsetget
     % ISNUMERIC True for numeric arrays.
     %
     % Example: m=MappedTensor(rand(10,20)); isnumeric(m)
-       bIsNumeric = ~islogical(mtVar) && ~ischar(mtVar);
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsNumeric = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsNumeric(index) = isnumeric(mtVar(index));
+        end
+        return
+      end
+
+      bIsNumeric = ~islogical(mtVar) && ~ischar(mtVar);
     end
       
     % isscalar - METHOD Overloaded isscalar function
@@ -764,7 +762,17 @@ classdef MappedTensor < hgsetget
     % ISSCALAR True if array is a scalar.
     %
     % Example: m=MappedTensor(1); isscalar(m)
-       bIsScalar = prod(size(mtVar)) == 1;
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsScalar = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsScalar(index) = isscalar(mtVar(index));
+        end
+        return
+      end
+      
+      bIsScalar = numel2(mtVar) == 1;
     end
       
     % ismatrix - METHOD Overloaded ismatrix function
@@ -772,7 +780,17 @@ classdef MappedTensor < hgsetget
     % ISMATRIX True if array is a matrix (not a scalar).
     %
     % Example: m=MappedTensor(rand(10)); ismatrix(m)
-       bIsMatrix = ~isscalar(mtVar);
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsMatrix = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsMatrix(index) = ismatrix(mtVar(index));
+        end
+        return
+      end
+      
+      bIsMatrix = ~isscalar(mtVar);
     end
       
     % ischar - METHOD Overloaded ischar function
@@ -780,7 +798,17 @@ classdef MappedTensor < hgsetget
     % ISCHAR  True for character array (string).
     %
     % Example: m=MappedTensor('Data','this is Mapped'); ischar(m)
-       bIsChar = isequal(mtVar.Format, 'char');
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsChar = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsChar(index) = ischar(mtVar(index));
+        end
+        return
+      end
+      
+      bIsChar = isequal(mtVar.Format, 'char');
     end
       
     % isfloat - METHOD Overloaded isfloat function
@@ -788,7 +816,17 @@ classdef MappedTensor < hgsetget
     % ISFLOAT True for floating point arrays, both single and double.
     %
     % Example: m=MappedTensor(single(rand(10))); isfloat(m)
-       bIsFloat = isequal(mtVar.Format, 'single') || isequal(mtVar.Format, 'double');
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsFloat = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsFloat(index) = isfloat(mtVar(index));
+        end
+        return
+      end
+      
+      bIsFloat = isequal(mtVar.Format, 'single') || isequal(mtVar.Format, 'double');
     end
       
     % isinteger - METHOD Overloaded isinteger function
@@ -796,14 +834,17 @@ classdef MappedTensor < hgsetget
     % ISINTEGER True for arrays of integer data type.
     %
     % Example: m=MappedTensor(uint8(eye(5))); isinteger(m)
-       bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
-    end
+
+    % handle array of objects
+      if numel(mtVar) > 1
+        bIsInteger = ones(size(mtVar));
+        for index=1:numel(mtVar)
+          bIsInteger(index) = isinteger(mtVar(index));
+        end
+        return
+      end
       
-    % strfind - METHOD Overloaded strfind function
-    function [nLoc] = strfind(mtVar, varargin) %#ok<INUSD>
-      warning('MappedTensor:Unsupported', ...
-        'MappedTensor/strfind: Warning: strfind is not supported.');
-      nLoc =[];
+      bIsInteger = ~isfloat(mtVar) & ~islogical(mtVar) & ~ischar(mtVar);
     end
       
     % uplus - METHOD Overloaded uplus operator (+mtVar)
@@ -818,6 +859,16 @@ classdef MappedTensor < hgsetget
       % FILEPARTS Return the files associated with the data
       %
       % Example: m=MappedTensor(eye(5)); ~isempty(dir(fileparts(m)))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        Filename=cell(1,numel2(mtVar)); FilenameCmplx = Filename;
+        for index=1:numel(mtVar)
+          [Filename{index}, FilenameCmplx{index}] = fileparts(mtVar(index));
+        end
+        return
+      end
+      
       Filename = mtVar.Filename;
       FilenameCmplx = mtVar.FilenameCmplx;
     end
@@ -826,6 +877,16 @@ classdef MappedTensor < hgsetget
       % CHAR Convert tensor representation to character array (string).
       %
       % Example: m=MappedTensor('Data',[72 101 108 108 111]); ischar(char(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData char(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'char');
     end
 
@@ -833,6 +894,16 @@ classdef MappedTensor < hgsetget
       % INT8 Convert tensor representation to signed 8-bit integer.
       %
       % Example: m=MappedTensor('Data','Hello'); isinteger(int8(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData int8(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'int8');
     end
 
@@ -840,6 +911,16 @@ classdef MappedTensor < hgsetget
       % UINT8 Convert tensor representation to unsigned 8-bit integer.
       %
       % Example: m=MappedTensor('Data','Hello'); isinteger(uint8(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData uint8(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'uint8');
     end
 
@@ -847,6 +928,16 @@ classdef MappedTensor < hgsetget
       % UINT8 Convert tensor representation to logical (true/false).
       %
       % Example: m=MappedTensor(eye(5)); islogical(logical(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData logical(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'logical');
     end
 
@@ -854,6 +945,16 @@ classdef MappedTensor < hgsetget
       % INT16 Convert tensor representation to signed 16-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(int16(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData int16(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'int16');
     end
 
@@ -861,6 +962,16 @@ classdef MappedTensor < hgsetget
       % UINT16 Convert tensor representation to unsigned 16-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(uint16(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData uint16(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'uint16');
     end
 
@@ -868,6 +979,16 @@ classdef MappedTensor < hgsetget
       % INT32 Convert tensor representation to signed 32-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(int32(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData int32(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'int32');
     end
 
@@ -875,6 +996,16 @@ classdef MappedTensor < hgsetget
       % UINT32 Convert tensor representation to unsigned 32-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(uint32(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData uint32(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'uint32');
     end
 
@@ -882,6 +1013,16 @@ classdef MappedTensor < hgsetget
       % SINGLE Convert tensor representation to single precision (float32).
       %
       % Example: m=MappedTensor(100*rand(10)); isnumeric(single(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData single(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'single');
     end
 
@@ -889,6 +1030,16 @@ classdef MappedTensor < hgsetget
       % INT64 Convert tensor representation to signed 64-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(int64(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData int64(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'int64');
     end
 
@@ -896,6 +1047,16 @@ classdef MappedTensor < hgsetget
       % UINT64 Convert tensor representation to unsigned 64-bit integer.
       %
       % Example: m=MappedTensor(100*rand(10)); isinteger(uint64(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData uint64(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'uint64');
     end
 
@@ -903,6 +1064,16 @@ classdef MappedTensor < hgsetget
       % SINGLE Convert tensor representation to double precision (float64).
       %
       % Example: m=MappedTensor(100*rand(10)); isnumeric(double(m))
+
+      % handle array of objects
+      if numel(mtVar) > 1
+        tfData = [];
+        for index=1:numel(mtVar)
+          tfData = [ tfData double(mtVar(index)) ];
+        end
+        return
+      end
+      
       tfData = cast(mtVar, 'double');
     end
       
@@ -930,58 +1101,6 @@ classdef MappedTensor < hgsetget
       end
 
     end % saveobj
-
-    function newVar = copyobj(mtVar)
-      % COPYOBJ Make deep copy of array.
-      %
-      % Example: m=MappedTensor(100*rand(10)); n=copyobj(m); isequal(m,n)
-
-      newVar = [];
-      % first we copy the files to new ones.
-      if ~isempty(mtVar.Filename) && ischar(mtVar.Filename) ...
-        && ~isempty(dir(mtVar.Filename))
-        [p,f] = fileparts(mtVar.Filename);
-        newRealFilename = tempname(p);
-        [ex,mess] = copyfile(mtVar.Filename, newRealFilename);
-        if ~ex
-          error([ mfilename ': copyobj: ERROR copying file ' mtVar.Filename ': ' message ])
-        end
-      else return;
-      end
-      if ~isempty(mtVar.FilenameCmplx) && ischar(mtVar.FilenameCmplx) ...
-        && ~isempty(dir(mtVar.FilenameCmplx))
-        [p,f] = fileparts(mtVar.FilenameCmplx);
-        newCmplxFilename = tempname(p);
-        [ex,mess] = copyfile(mtVar.FilenameCmplx, newCmplxFilename);
-        if ~ex
-          error([ mfilename ': copyobj: ERROR copying file ' mtVar.FilenameCmplx ': ' message ])
-        end
-      else newCmplxFilename = [];
-      end
-
-      % then we recreate the object.
-      vnOriginalSize = mtVar.vnOriginalSize; %#ok<PROP>
-      vnOriginalSize(end+1:numel(mtVar.vnDimensionOrder)) = 1; %#ok<PROP>
-     
-      % - Return the size of the tensor data element, permuted
-      vnSize = vnOriginalSize(mtVar.vnDimensionOrder); %#ok<PROP>
-      
-      args = { ...
-        'Filename',         newRealFilename, ...
-        'Filename_Complex', newCmplxFilename, ...
-        'Format',           mtVar.Format, ...
-        'MachineFormat',    mtVar.MachineFormat, ...
-        'Temporary',        mtVar.Temporary, ...
-        'Writable',         mtVar.Writable, ...
-        'Offset',           mtVar.Offset, ...
-        'Size',             vnSize };
-        
-      newVar = MappedTensor(args{:}); % build new object
-
-      newVar.vnOriginalSize   = mtVar.vnOriginalSize;
-      newVar.vnDimensionOrder = mtVar.vnDimensionOrder;
-      
-    end % copyobj
       
   end % methods
       
