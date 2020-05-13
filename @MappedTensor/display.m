@@ -42,6 +42,10 @@ function display(mtVar, iname)
   end
 
   disp(' ')
+  if mtVar.bCompressed
+    disp(' Compressed'); disp(' ');
+    return;
+  end
   % now display few elements from the array
   nb = 4;  % number of elements to display at beginning and end.
   if mtVar.nNumElements < 8, nb=mtVar.nNumElements; end

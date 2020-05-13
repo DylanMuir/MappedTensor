@@ -194,13 +194,13 @@
 classdef MappedTensor < hgsetget
   properties % public, in sync with memmapfile
     Filename ='';;        % Binary data file on disk (real part of tensor)
-    FilenameCmplx='';  % Binary data file on disk (complex part of tensor)
+    FilenameCmplx='';     % Binary data file on disk (complex part of tensor)
     Format   = 'double';  % The class of this mapped tensor
     Writable = true;      % Should the data be protected from writing?
     Offset   = 0;         % The number of bytes to skip at the beginning of the file
     Data;                 % The actual Data (alias)
     Temporary=true;       % A flag which records whether a temporary file was created
-    MachineFormat;       % The desired machine format of the mapped file
+    MachineFormat;        % The desired machine format of the mapped file
   end
   
   properties (Access = private)
@@ -220,6 +220,7 @@ classdef MappedTensor < hgsetget
     hShimFunc;              % Handle to the (hopefully compiled) shim function
     hRepSumFunc;            % Handle to the (hopefully compiled) repsum function
     hChunkLengthFunc;       % Handle to the (hopefully compiled) chunk length function
+    bCompressed=0;          % 0: uncompressed; 1: compressed; 2:operation in progress       
   end % properties
    
   methods
