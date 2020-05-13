@@ -76,7 +76,8 @@ All properties can be accessed with syntax e.g. `M.property`. All these properti
 | Property | Description |
 |----------|-------------|
 | Data  |  The actual Data |
-| Filename  |  Binary data file on disk (real part of tensor) |
+| Filename  |  Binary data file name on disk (real part of tensor) |
+| FilenameCmplx  |  Binary data file name on disk (complex part of tensor) |
 | Format  |  The class of this mapped tensor |
 | MachineFormat  |  The desired machine format of the mapped file |
 | Offset  |  The number of bytes to skip at the beginning of the file |
@@ -130,6 +131,10 @@ M([ 1 3 5... ]) = slice;
 
 `Filename`: Char array.
 Contains the name of the file being mapped. You can also get the
+mapped file with FILEPARTS.
+
+`FilenameCmplx`: Char array.
+Contains the name of the file being mapped (complex part). You can also get the
 mapped file with FILEPARTS.
 
 ##Additional Name/Value pair options at build only
