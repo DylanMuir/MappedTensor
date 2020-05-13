@@ -179,6 +179,10 @@
 %      source MATLAB toolchain for visual stimulation and analysis of two-photon
 %      calcium neuronal imaging data". Frontiers in Neuroinformatics 8 (85).
 %      DOI: 10.3389/fninf.2014.00085
+%
+%    This version of the code has been heavily revamped by
+%    <emmanuel.farhi@synchrotron-soleil.fr>. Please cite the following
+%    publication E. Farhi et al., J. Neut. Res., 17 (2013) 5. DOI: 10.3233/JNR-130001
 % 
 %    See also MEMMAPFILE, MAPPEDTENSOR/arrayfun, MAPPEDTENSOR/get, 
 %    MAPPEDTENSOR/subsasgn, MAPPEDTENSOR/subsref.

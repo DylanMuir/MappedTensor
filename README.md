@@ -86,7 +86,7 @@ All properties can be accessed with syntax e.g. `M.property`. All these properti
 
 We detail below the use of these properties, especially to set an initial tensor.
 
-`Format`: Char string (defaults to 'double').
+##### `Format`: Char string (defaults to 'double').
 Format of the contents of the mapped region. 
 Format specifies that the mapped data is to be accessed as a single
 vector of type specified by Format's value. 
@@ -96,19 +96,19 @@ Complex arrays are supported. Sparse arrays are not supported.
 You can change later the storage class of the object with the CAST 
 method, however this is usually not recommended.
 
-`Offset`: Non-negative integer (defaults to 0).
+##### `Offset`: Non-negative integer (defaults to 0).
 Number of bytes from the start of the file to the start of the
 mapped region. Offset 0 represents the start of the file. This 
 allows to skip over the beginning of an (existing) binary file, by
 throwing away the specified number of header bytes. You can use 
 methdos FREAD and FWRITE to read this header region.
 
-`Writable`: True or false (defaults to false).
+##### `Writable`: True or false (defaults to false).
 Access level which determines whether or not Data property (see
 below) may be assigned to.
 This property can be changed after object creation.
 
-`Temporary`: True or false (default to true when created from array).
+##### `Temporary`: True or false (default to true when created from array).
 When false, the associated file is kept when the object is cleared.
 Such files can be further reused. When the object is created from
 an array, Temporary is true. When creating from an existing map file
@@ -116,10 +116,10 @@ Temporary is false. You can change this property after creation.
 When saving an object, the Temporary state is set to false.
 This property can be changed after object creation.
 
-`MachineFormat`: big-endian ('ieee-be') or little-endian ('ieee-le')
+##### `MachineFormat`: big-endian ('ieee-be') or little-endian ('ieee-le')
 If not specified, the machine-native format will be used.
 
-`Data`: array
+##### `Data`: array
 Array to assign to the mapped object.
 This property can be changed after object creation.
 You can also set the Data with syntax: 
@@ -129,26 +129,26 @@ M(:)            = whole_array;
 M([ 1 3 5... ]) = slice; 
 ```
 
-`Filename`: Char array.
+##### `Filename`: Char array.
 Contains the name of the file being mapped. You can also get the
 mapped file with FILEPARTS.
 
-`FilenameCmplx`: Char array.
+##### `FilenameCmplx`: Char array.
 Contains the name of the file being mapped (complex part). You can also get the
 mapped file with FILEPARTS.
 
-##Additional Name/Value pair options at build only
+## Additional Name/Value pair options at build only
 
-`TempDir`: Directory path
+##### `TempDir`: Directory path
 Directory where the mapped file(s) should stored. The default path
 is e.g. TMPDIR or /tmp. You may also use /dev/shm on Linux systems
 to map the file into memory.
 
-`Like`: array
+##### `Like`: array
 Specified array dimension and class is used to preallocate a new
 object. Note that sparse arrays are not supported.
 
-`Size`: [d1 d2 ...] array
+##### `Size`: [d1 d2 ...] array
 Vector which specifies the size of the mapped array. This is the same as specifying dimensions as first arguments (see above).
 
 All the properties above may also be accessed after the MappedTensor object
@@ -282,6 +282,7 @@ Static    |  loadobj  |  Load filter for objects. |
 | numel  |  Number of object in a vector. The number of elements in a single tensor is obtailed with `prod(size(M))` |
 | numel2  |  NUMEL2 Number of elements in an array, same as `prod(size(M))` |
 | or  |  | Logical OR. (binary op) |
+| pack | Compress mapped data files |
 | permute  |  Permute array dimensions |
 | plot  |  Plot an array. |
 | plus  |  + Plus. (binary op) |
@@ -314,6 +315,7 @@ Static    |  loadobj  |  Load filter for objects. |
 | uint64  |  Convert tensor representation to unsigned 64-bit integer. |
 | uint8  |  Convert tensor representation to unsigned 8-bit integer. |
 | uminus  |  - Unary minus. (unary op) |
+| unpack | Decompress mapped data files |
 | uplus  |  + Unary plus. |
 | var  |  Variance. (unary op) |
 | version  |  Return class version |
@@ -341,8 +343,13 @@ A new open source MATLAB toolchain for visual stimulation and analysis of two-ph
 **Frontiers in Neuroinformatics** 8 _85_. DOI: [10.3389/fninf.2014.00085](http://dx.doi.org/10.3389/fninf.2014.00085).
 Please cite our publication in lieu of thanks, if you use this code.
 
+This version of the code has been heavily revamped by
+<emmanuel.farhi@synchrotron-soleil.fr>. Please cite the following
+publication:
+- E. Farhi et al., J. Neut. Res., 17 (2013) 5. DOI: 10.3233/JNR-130001
+
 [1]: http://www.mathworks.com
 [2]: http://www.mathworks.com/help/techdoc/ref/memmapfile.html
-[3]: https://github.com/DylanMuir/MappedTensor/releases/latest
+[3]: https://github.com/farhi/MappedTensor/releases/latest
 [4]: http://www.frontiersin.org/neuroinformatics
 [5]: http://dx.doi.org/10.3389/fninf.2014.00085
