@@ -1,5 +1,5 @@
 function [Descr, args, frame] = private_load_smv(filename)
-% PRIVATE_LOAD_SMV read an ADSC X-ray detector image
+% PRIVATE_LOAD_SMV Read an ADSC X-ray detector image
 %
 %  Read an image file written by an ADSC detector.
 %  ADSC detectors write images in the "SMV" file format which consists of a text

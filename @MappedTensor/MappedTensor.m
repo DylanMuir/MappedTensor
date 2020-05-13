@@ -41,8 +41,8 @@
 %    or is otherwise cleared, the memory map is automatically closed.
 %    You may also call the DELETE method to force clear the object.
 % 
-%    Tensor properties (at build on later)
-%    =====================================
+%    Tensor properties
+%    =================
 %
 %    These properties can be set at build stage.
 % 
@@ -119,6 +119,24 @@
 %    function when a MappedTensor variable is first created.  This requires
 %    mex to be configured correctly for your system.  If compilation fails,
 %    then a slower pure Matlab version will be used.
+%
+%    Loading from data files
+%    =======================
+%
+%    The LOAD method allows to lazy import binary data sets with syntax
+%
+%    m = load(MappedTensor, 'filename');
+%
+%    with the following data formats.
+%
+%     | Extension         | Description               |
+%     |-------------------|---------------------------|
+%     | EDF               | ESRF Data Format          |
+%     | POS               | Atom Probe Tomography     |
+%     | NPY               | Python NumPy array        |
+%     | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
+%     | MAR               | MAR CCD image             |
+%     | IMG MCCD          | ADSC X-ray detector image |
 %
 %    Using the array:
 %    ================

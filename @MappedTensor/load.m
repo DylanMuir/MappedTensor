@@ -1,17 +1,18 @@
 function mtVar = load(mt0, filename)
-% LOAD Lazy load of data into a mapped tensor.
+% LOAD Lazy loading of data into a mapped tensor.
 %   Supported formats:
-%     EDF
-%     POS
-%     NPY
-%     MRC
-%     MAR
-%     ADSC (IMG/SMV)
-%     HBIN
+%   | Extension         | Description               |
+%   |-------------------|---------------------------|
+%   | EDF               | ESRF Data Format          |
+%   | POS               | Atom Probe Tomography     |
+%   | NPY               | Python NumPy array        |
+%   | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
+%   | MAR               | MAR CCD image             |
+%   | IMG MCCD          | ADSC X-ray detector image |
 %
 % Not implemented
-%     VOL + PAR ?
-%     Analyze ?
+%     VOL + PAR PyHST2 volume reconstruction
+%     Analyze   Mayo Clinic volume
 
 mtVar = [];
 
