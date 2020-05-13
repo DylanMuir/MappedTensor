@@ -15,10 +15,10 @@ function make_complex(mtVar)
     end
 
     % - make enough space for a tensor
-    mtVar.strCmplxFilename = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
+    mtVar.FilenameCmplx = create_temp_file(mtVar.nNumElements * mtVar.nClassSize + mtVar.Offset, mtVar.strTempDir);
 
     % - open the file
-    mtVar.hCmplxContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.strCmplxFilename, mtVar.MachineFormat);
+    mtVar.hCmplxContent = mtVar.hShimFunc('open', ~mtVar.Writable, mtVar.FilenameCmplx, mtVar.MachineFormat);
 
     % - record that the tensor has a complex part
     mtVar.bIsComplex = true;

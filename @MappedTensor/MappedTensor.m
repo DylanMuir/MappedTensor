@@ -193,12 +193,12 @@
 
 classdef MappedTensor < hgsetget
   properties % public, in sync with memmapfile
-    Filename;             % Binary data file on disk (real part of tensor)
-    strCmplxFilename;       % Binary data file on disk (complex part of tensor)
+    Filename ='';;        % Binary data file on disk (real part of tensor)
+    FilenameCmplx='';  % Binary data file on disk (complex part of tensor)
     Format   = 'double';  % The class of this mapped tensor
     Writable = true;      % Should the data be protected from writing?
     Offset   = 0;         % The number of bytes to skip at the beginning of the file
-    Data;                 % The actual Data
+    Data;                 % The actual Data (alias)
     Temporary=true;       % A flag which records whether a temporary file was created
     MachineFormat;       % The desired machine format of the mapped file
   end
@@ -229,11 +229,17 @@ classdef MappedTensor < hgsetget
     %
     % Example: m = MappedTensor(rand(100,100))
 
+      persistent hShimFunc hRepSumFunc hChunkLengthFunc
+
       % MAPPEDTENSOR Get a handle to the appropriate shim function (should be done
       %     before any errors are thrown)
-      [mtVar.hShimFunc, ...
-      mtVar.hRepSumFunc, ...
-      mtVar.hChunkLengthFunc] = GetMexFunctionHandles;
+      if isempty(hShimFunc)
+        [hShimFunc, hRepSumFunc, hChunkLengthFunc] = GetMexFunctionHandles;
+      end
+
+      mtVar.hShimFunc        = hShimFunc;
+      mtVar.hRepSumFunc      = hRepSumFunc;
+      mtVar.hChunkLengthFunc = hChunkLengthFunc;
 
       % - Filter arguments for properties
       vbKeepArg = true(numel(varargin), 1);
@@ -355,10 +361,10 @@ classdef MappedTensor < hgsetget
             nArg = nArg + 1;
             mtVar.Temporary = false;
 
-          case {'filename_complex','strcmplxfilename' }
+          case {'filename_complex','strcmplxfilename','filenamecmplx' }
             if ischar(varargin{nArg+1})
               if ~isempty(dir(varargin{nArg+1}))
-                mtVar.strCmplxFilename = varargin{nArg+1};
+                mtVar.FilenameCmplx = varargin{nArg+1};
               else
                 error([ mfilename ' file ' varargin{nArg+1} ' is missing.' ])
               end
@@ -492,7 +498,7 @@ classdef MappedTensor < hgsetget
            mtVar.hShimFunc('close', mtVar.hCmplxContent);
         end
 
-        for f={ mtVar.Filename mtVar.strCmplxFilename }
+        for f={ mtVar.Filename mtVar.FilenameCmplx }
           if ~isempty(f{1}) && ischar(f{1}) && ~isempty(dir(f{1}))
             if mtVar.Temporary
                % - Really delete the temporary file, don't just put it in the trash
@@ -808,12 +814,12 @@ classdef MappedTensor < hgsetget
     end
 
     %% fileparts - METHOD Return the files that underlie this MappedTensor
-    function [Filename, strCmplxFilename] = fileparts(mtVar)
+    function [Filename, FilenameCmplx] = fileparts(mtVar)
       % FILEPARTS Return the files associated with the data
       %
       % Example: m=MappedTensor(eye(5)); ~isempty(dir(fileparts(m)))
       Filename = mtVar.Filename;
-      strCmplxFilename = mtVar.strCmplxFilename;
+      FilenameCmplx = mtVar.FilenameCmplx;
     end
 
     function tfData = char(mtVar)
@@ -906,7 +912,7 @@ classdef MappedTensor < hgsetget
 
       % - Generate a structure containing only the pertinent properties
       sVar.Filename         = mtVar.Filename;
-      sVar.strCmplxFilename = mtVar.strCmplxFilename;
+      sVar.FilenameCmplx = mtVar.FilenameCmplx;
       sVar.Temporary        = false;
       sVar.Format           = mtVar.Format;
       sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
@@ -919,8 +925,8 @@ classdef MappedTensor < hgsetget
       mtVar.Temporary = false; % must keep data
       
       disp([ mfilename ': saveobj: please keep file (real)    ' sVar.Filename])
-      if mtVar.bIsComplex && ~isempty(sVar.strCmplxFilename)
-        disp([ mfilename ': saveobj: please keep file (complex) ' sVar.strCmplxFilename])
+      if mtVar.bIsComplex && ~isempty(sVar.FilenameCmplx)
+        disp([ mfilename ': saveobj: please keep file (complex) ' sVar.FilenameCmplx])
       end
 
     end % saveobj
@@ -942,13 +948,13 @@ classdef MappedTensor < hgsetget
         end
       else return;
       end
-      if ~isempty(mtVar.strCmplxFilename) && ischar(mtVar.strCmplxFilename) ...
-        && ~isempty(dir(mtVar.strCmplxFilename))
-        [p,f] = fileparts(mtVar.strCmplxFilename);
+      if ~isempty(mtVar.FilenameCmplx) && ischar(mtVar.FilenameCmplx) ...
+        && ~isempty(dir(mtVar.FilenameCmplx))
+        [p,f] = fileparts(mtVar.FilenameCmplx);
         newCmplxFilename = tempname(p);
-        [ex,mess] = copyfile(mtVar.strCmplxFilename, newCmplxFilename);
+        [ex,mess] = copyfile(mtVar.FilenameCmplx, newCmplxFilename);
         if ~ex
-          error([ mfilename ': copyobj: ERROR copying file ' mtVar.strCmplxFilename ': ' message ])
+          error([ mfilename ': copyobj: ERROR copying file ' mtVar.FilenameCmplx ': ' message ])
         end
       else newCmplxFilename = [];
       end
@@ -994,7 +1000,7 @@ classdef MappedTensor < hgsetget
 
       args = { ...
         'Filename',         sSavedVar.Filename, ...
-        'Filename_Complex', sSavedVar.strCmplxFilename, ...
+        'Filename_Complex', sSavedVar.FilenameCmplx, ...
         'Format',           sSavedVar.Format, ...
         'MachineFormat',    sSavedVar.MachineFormat, ...
         'Temporary',        false, ...

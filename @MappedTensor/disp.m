@@ -24,7 +24,7 @@ function disp(mtVar)
 
   display(mtVar, iname);
 
-  disp([ '  Filename:   ' mtVar.Filename ' ' mtVar.strCmplxFilename ]);
+  disp([ '  Filename:   ' mtVar.Filename ' ' mtVar.FilenameCmplx ]);
   disp([ '  Writable:   ' mat2str(mtVar.Writable) ])
   disp([ '  Offset:     ' num2str(mtVar.Offset) ])
   disp([ '  Format:     ' mtVar.Format ])
