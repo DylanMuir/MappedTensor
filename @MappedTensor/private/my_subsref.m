@@ -97,7 +97,7 @@ function [tfData] = my_subsref(mtVar, S)
         tfData = complex(mtVar.fRealFactor .* tfData, ...
                          mtVar.fComplexFactor .* tfImagData);
     else
-        tfData = mtVar.fRealFactor .* tfData;
+        tfData = mtVar.fRealFactor .* double(tfData);
     end
 
     % - Recast data, if required, to take into account scaling which

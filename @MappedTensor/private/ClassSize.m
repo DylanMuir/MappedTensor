@@ -25,6 +25,7 @@ function [nBytes, strStorageClass] = ClassSize(Format)
            nBytes = 8;
            
         otherwise
-           error('MappedTensor:InvalidClass', '*** MappedTensor/ClassSize: Invalid class specifier.');
+           error('MappedTensor:InvalidClass', ...
+           ['*** MappedTensor/ClassSize: Invalid class specifier: ' Format ]);
     end
     end
