@@ -12,6 +12,15 @@ function [tFinalSum] = sum(mtVar, varargin)
 %
 % Example: m=MappedTensor(rand(10)); sum(m)
 
+  % handle array of objects
+  if numel(mtVar) > 1
+    tFinalSum = [];
+    for index=1:numel(mtVar)
+      tFinalSum = [ tFinalSum sum(mtVar(index), varargin{:}) ];
+    end
+    return
+  end
+
    % - Get tensor size
    vnTensorSize = size(mtVar);
    

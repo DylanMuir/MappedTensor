@@ -18,6 +18,17 @@ function [tfMax, tnMaxIndices] = min(mtVar, varargin)
           '*** MappedTensor/min: Too many arguments were provided.');
   end
 
+  % handle array of objects
+  if numel(mtVar) > 1
+    tfMax=[]; tnMaxIndices=[];
+    for index=1:numel(mtVar)
+      [a,b] = min(mtVar(index), varargin{:});
+      tfMax        = [ tfMax a ];
+      tnMaxIndices = [ tnMaxIndices b ];
+    end
+    return
+  end
+
   % - Record stack size
   vnSize = size(mtVar);
 
