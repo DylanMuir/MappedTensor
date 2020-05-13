@@ -8,7 +8,7 @@ function [mtVar] = subsasgn(mtVar, S, tfData)
 %
 %   A.field = B assigns value B to the object property 'field'.
 %
-%   
+% Example: m=MappedTensor(eye(5)); m(1) = 2; m(1) == 2
   if ischar(S) 
     S = substruct('.',S)
   elseif isnumeric(S)

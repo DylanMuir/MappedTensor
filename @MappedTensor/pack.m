@@ -32,7 +32,7 @@ function ret = pack(mtVar, method)
 %   Recommended compressors are LZ4, ZSTD, PIGZ and PBZIP2.
 %   ZIP, GZIP and TAR are supported without further installation.
 %
-% Example: m=MappedTensor(eye(1000)); pack(m); unpack(m); ~pack(m,'check')
+% Example: m=MappedTensor(eye(1000)); pack(m); pack(m,'check')
 
 persistent present
 
