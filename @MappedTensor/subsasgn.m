@@ -9,6 +9,11 @@ function [mtVar] = subsasgn(mtVar, S, tfData)
 %   A.field = B assigns value B to the object property 'field'.
 %
 %   
+  if ischar(S) 
+    S = substruct('.',S)
+  elseif isnumeric(S)
+    S = substruct('()',{ S });
+  end
 
   % handle array of objects
   if numel(mtVar) > 1
