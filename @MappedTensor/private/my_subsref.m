@@ -74,6 +74,9 @@ function [tfData] = my_subsref(mtVar, S)
     end
 
     % - Reference the tensor data element
+    if pack(mtVar,'check')
+      unpack(mtVar);
+    end
     tfData = mt_read_data(mtVar.hShimFunc, mtVar.hRealContent, S, vnReferencedTensorSize, mtVar.strStorageClass, mtVar.Offset, mtVar.bBigEndian, mtVar.hRepSumFunc, mtVar.hChunkLengthFunc);
 
     if (mtVar.bIsComplex)

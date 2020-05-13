@@ -1,6 +1,11 @@
-function mtVar = pack(mtVar, method, flag)
+function ret = pack(mtVar, method)
 % PACK    Compress the mapped file.
 %   Compress tensor storage with ZIP, TAR, GZIP, LZ4, ZSTD, BZIP2, XZ, LZO, ...
+%   M = PACK(M) compresses the mapped data files for given tensor.
+%   Unpacking is done transparently when data is accessed, or can be forced with
+%   UNPACK(M).
+%
+%   TF = PACK(M, 'check') returns true when the tensor M is compressed.
 %
 %   You should install the extractors individually.
 %   Recommended:
@@ -26,6 +31,8 @@ function mtVar = pack(mtVar, method, flag)
 %
 %   Recommended compressors are LZ4, ZSTD, PIGZ and PBZIP2.
 %   ZIP, GZIP and TAR are supported without further installation.
+%
+% Example: m=MappedTensor(eye(1000)); pack(m); unpack(m); ~pack(m,'check')
 
 persistent present
 
@@ -34,28 +41,57 @@ if isempty(present)
 end
 
 if nargin < 2, method = ''; end
-if nargin < 3, flag = false;  end % decompress flag
-if ischar(method) && any(strncmp(lower(method), {'dec','ext'},3))
-  flag = true;
+
+% handle array of objects
+if numel(mtVar) > 1
+  ret = [];
+  for index=1:numel(mtVar)
+    ret = [ ret pack(mtVar(index), method) ];
+  end
+  return
+end
+
+flag_decompress = false;
+
+% check current state: already done, or status required ?
+switch(method)
+case {'decompress','extract','pack'}
+  flag_decompress = true;
+  method = '';
+case {'compress','pack'}
+  method = '';
+case 'identify'
+  ret = present;
+  return
+case {'check','status'}
+  ret= iscompressed(mtVar.Filename, present) || iscompressed(mtVar.FilenameCmplx, present);
+  return
 end
 if isempty(method), method=present(1); end
 
-% check current state
-if  flag && ~mtVar.bCompressed, return; end
-if ~flag &&  mtVar.bCompressed, return; end % already compressed or in progress
+ret = mtVar;
 
-% launch compression
-mtVar.bCompressed = 2; % in progress;
-
-if ~flag
-  mtVar.Filename      = compress(mtVar.Filename,      method, present);
-  mtVar.FilenameCmplx = compress(mtVar.FilenameCmplx, method, present);
-
+% launch de/compression
+if ~flag_decompress
+  if ~iscompressed(mtVar.Filename, present)
+    mtVar.bCompressed = 2; % in progress;
+    mtVar.Filename      = compress(mtVar.Filename,      method, present);
+  end
+  if ~iscompressed(mtVar.FilenameCmplx, present)
+    mtVar.bCompressed = 2; % in progress;
+    mtVar.FilenameCmplx = compress(mtVar.FilenameCmplx, method, present);
+  end
   mtVar.bCompressed = 1; % now compressed
+  
 else
-  mtVar.Filename      = decompress(mtVar.Filename,      present);
-  mtVar.FilenameCmplx = decompress(mtVar.FilenameCmplx, present);
-
+  if iscompressed(mtVar.Filename, present)
+    mtVar.bCompressed = 2; % in progress;
+    mtVar.Filename      = decompress(mtVar.Filename,      present);
+  end
+  if iscompressed(mtVar.FilenameCmplx, present)
+    mtVar.bCompressed = 2; % in progress;
+    mtVar.FilenameCmplx = decompress(mtVar.FilenameCmplx, present);
+  end
   mtVar.bCompressed = 0; % now decompressed
 end
 
@@ -65,19 +101,13 @@ function newfile = compress(filename, compressor, present)
 
   newfile = filename;
   if isempty(filename), return; end
-  
-  % is file already compressed ?
-  % identify which compressor is used (from extension)
-  [p,f,e] = fileparts(filename);
-  index   = find(strcmp(lower(e(2:end)), lower({ present.extension })));
-  if ~isempty(index), return; end % already an archive
 
   if ischar(compressor)
     index=find(strcmp(compressor, { present.extension }));
     if isempty(index)
       disp('Available compressors:')
-      fprintf(1, ' %s', { present.extension });
-      error([ mfilename ': can not find compressor ' compressor '.' ]);
+      disp(sprintf(' %s', present.extension))
+      error([ mfilename ': can not find compressor ' compressor ]);
     end
     compressor = present(index);
   end
@@ -91,11 +121,9 @@ function newfile = compress(filename, compressor, present)
     if strncmp(compressor.compress, 'matlab:', 7)
       compressor.compress = compressor.compress(8:end);
     end
-    disp([ compressor.compress ' ' newfile ' ' filename ])
     feval(compressor.compress, newfile, filename);
   else
     % compress
-    disp([compressor.compress ' ' filename ' ' newfile])
     system([compressor.compress ' ' filename ]);
   end
   
@@ -112,12 +140,13 @@ function newfile = decompress(filename, present)
   if isempty(filename), return; end
 
   % identify which compressor is used (from extension)
-  [p,f,e] = fileparts(filename);
-  index   = find(strcmp(lower(e(2:end)), lower({ present.extension })));
-  if isempty(index), return; end % not an archive
-  compressor = present(index);
+  [tf,compressor] = iscompressed(filename, present);
+  if isempty(compressor)
+    return; % not compressed
+  end
   
   % decompress it
+  [p,f,e] = fileparts(filename);
   newfile = fullfile(p,f); % no extension
 
   % extract it
@@ -131,13 +160,25 @@ function newfile = decompress(filename, present)
   else    
     % extract
     system([compressor.decompress ' ' filename ]);
-
   end
   
   % remove initial archive from temp dir
   if ~isempty(dir(filename))
     delete(filename);
   end
+
+% ------------------------------------------------------------------------------
+function [tf, compressor] = iscompressed(filename, present)
+% ISCOMPRESSED check if file is compressed
+
+  tf = false; compressor = [];
+
+  % identify which compressor is used (from extension)
+  [p,f,e] = fileparts(filename);
+  index   = find(strcmp(lower(e(2:end)), lower({ present.extension })),1);
+  if isempty(index), return; end % not an archive
+  compressor = present(index);
+  tf = true;
 
 % ------------------------------------------------------------------------------
 function present = check_compressors(options)
@@ -172,7 +213,8 @@ function present = check_compressors(options)
              'lzma','lzma --version',   'lzma -d',       'lzma -1';
              'zip', 'matlab:unzip',     'matlab:unzip',  'matlab:zip';
              'gz',  'matlab:gunzip',    'matlab:gunzip', 'matlab:gzip';
-             'tgz', 'matlab:untar',     'matlab:untar',  'matlab:tar' };
+             'tgz', 'matlab:untar',     'matlab:untar',  'matlab:tar';
+             'tar', 'matlab:untar',     'matlab:untar',  'matlab:tar'};
 
   for totest = tocheck'
     % look for executable and test with various extensions

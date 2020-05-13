@@ -36,6 +36,10 @@ function [mtVar] = subsasgn(mtVar, S, tfData)
     error('MappedTensor:ReadProtect', '*** MappedTensor: Attempted write to a read-only tensor.');
   end
 
+  if pack(mtVar,'check')
+    unpack(mtVar);
+  end
+
   % - Test real/complex nature of input and current tensor
   if (~isreal(tfData))
     % - The input data is complex

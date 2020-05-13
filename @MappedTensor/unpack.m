@@ -1,6 +1,10 @@
 function mtVar = unpack(mtVar)
 % UNPACK  Decompress the mapped file.
 %   Decompress tensor storage with ZIP, TAR, GZIP, LZ4, ZSTD, BZIP2, XZ, LZO, ...
+%   M = UNPACK(M) decompresses the mapped data files for given tensor.
+%   However, unpacking is usually done transparently when data is accessed.
+%
+%   TF = PACK(M, 'check') returns true when the tensor M is compressed.
 %
 %   You should install the extractors individually.
 %   Recommended:
@@ -26,5 +30,7 @@ function mtVar = unpack(mtVar)
 %
 %   Recommended compressors are LZ4, ZSTD, PIGZ and PBZIP2.
 %   ZIP, GZIP and TAR are supported without further installation.
+%
+% Example: m=MappedTensor(eye(1000)); pack(m); unpack(m); 
 
   mtVar = pack(mtVar, 'decompress');

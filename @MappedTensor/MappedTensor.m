@@ -1093,6 +1093,7 @@ classdef MappedTensor < hgsetget
       sVar.Offset           = mtVar.Offset;
       sVar.MachineFormat    = mtVar.MachineFormat;
       sVar.Size             = size(mtVar);
+      sVar.bCompressed      = mtVar.bCompressed;
 
       mtVar.Temporary = false; % must keep data
       
@@ -1132,6 +1133,7 @@ classdef MappedTensor < hgsetget
 
       mtVar.vnOriginalSize   = sSavedVar.vnOriginalSize;
       mtVar.vnDimensionOrder = sSavedVar.vnDimensionOrder;
+      mtVar.bCompressed      = sSavedVar.bCompressed;
 
     end
   end % methods (static)
