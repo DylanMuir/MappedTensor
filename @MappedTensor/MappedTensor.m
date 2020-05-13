@@ -1,4 +1,5 @@
 % MAPPEDTENSOR Construct memory-mapped file object.
+% MAPPEDTENSOR Construct memory-mapped file object.
 %    The MAPPEDTENSOR object allows to handle data sets larger than the available 
 %    memory. The variable can be passed around BY REFERENCE, indexed and
 %    written to without allocating space for the entire variable in Matlab. Note
@@ -205,6 +206,7 @@ classdef MappedTensor < hgsetget
     Data;                 % The actual Data (alias)
     Temporary=true;       % A flag which records whether a temporary file was created
     MachineFormat;        % The desired machine format of the mapped file
+    UserData;             % where to store more stuff
   end
   
   properties (Access = private)
@@ -424,7 +426,7 @@ classdef MappedTensor < hgsetget
           vnTensorSize = double([varargin{:}]);
         end
       end
-
+      vnTensorSize = double(vnTensorSize);
       % - If only one dimension was provided, assume the matrix is
       % square (Matlab default semantics)
       if (isscalar(vnTensorSize))
@@ -1123,9 +1125,16 @@ classdef MappedTensor < hgsetget
       % - Return the size of the tensor data element, permuted
       vnSize = vnOriginalSize(sSavedVar.vnDimensionOrder); %#ok<PROP>
 
+      % check files. Are they available ?
+      Filename = private_search_file(sSavedVar.Filename);
+      if isempty(Filename)
+        warning([ mfilename ': loadobj: can not find mapped data file ' sSavedVar.Filename ]);
+      end
+      FilenameCmplx = private_search_file(sSavedVar.FilenameCmplx);
+
       args = { ...
-        'Filename',         sSavedVar.Filename, ...
-        'Filename_Complex', sSavedVar.FilenameCmplx, ...
+        'Filename',         Filename, ...
+        'Filename_Complex', FilenameCmplx, ...
         'Format',           sSavedVar.Format, ...
         'MachineFormat',    sSavedVar.MachineFormat, ...
         'Temporary',        false, ...
