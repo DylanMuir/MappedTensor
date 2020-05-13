@@ -142,7 +142,8 @@ mapped file with FILEPARTS.
 ##### `TempDir`: Directory path
 Directory where the mapped file(s) should stored. The default path
 is e.g. TMPDIR or /tmp. You may also use /dev/shm on Linux systems
-to map the file into memory.
+to map the file into memory. This can be very efficient in terms of I/O, and
+an be coupled with tensor compression with the `pack` method.
 
 ##### `Like`: array
 Specified array dimension and class is used to preallocate a new
@@ -162,6 +163,10 @@ changes the Writable property of M to true.
 
 The MappedTensor array can be used in most cases just as a normal Matlab
 array, as many class methods have been defined to match the usual behaviour.
+
+You may access the array with indices as in `M(I,J,..)`. The full tensor content
+is retrieved with `M(:)` as a column, or `M(:,:)` as pages, and finally as 
+`M.Data` to get the raw shaped array.
 
 Most standard Matlab operators just work transparently with MAPPEDTENSOR.
 You may use single objects, and even array of tensors for a vectorized
@@ -183,12 +188,24 @@ the entire tensor.
 
 To work efficiently on very large arrays, it is recommended to employ the
 ARRAYFUN method, which applies a function FUN along a given dimension. This
-is done transparently for many unary and binary operators.
+is done transparently for many unary and binary operators (with ARRAYFUN2).
 
 The NUMEL method returns 1 on a single object, and the number of elements
 in vectors of objects. To get the number of elements in a single object, 
-use PROD(SIZE(M)). This behaviour allows most methods to be vectorized on
-sequences on tensors.
+use NUMEL2(M) or PROD(SIZE(M)). This behaviour allows most methods to be 
+vectorized on sequences on tensors.
+
+If you need to handle many such tensors, it may be a good idea to compress them
+with `pack(m)` while you are not using them. This can be done for instance right
+after loading content. Decompression is performed transparently while you access
+the tensor array. Think about re-compressing afterwards to save disk/memory. 
+Compression is usually extremely efficient on data with low randomness.
+
+An efficient processing pipeline could be:
+- load tensors 
+- compress them with `pack`
+- do whatever you need (extraction is performed automatically)
+- recompress as soon as possible with `pack`
 
 A list of available methods is shown below.
 
