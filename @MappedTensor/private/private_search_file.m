@@ -15,7 +15,7 @@ function filename = private_search_file(filename)
   [p,f,e] = fileparts(filename);
   for loc = { home pwd }
     newfile = fullfile(loc{1}, [f e]);
-    if ~isempty(dir(newfile)
+    if ~isempty(dir(newfile))
       filename = newfile; return;
     end
   end

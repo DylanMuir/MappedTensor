@@ -40,6 +40,7 @@
 %    Note: When a variable containing a MAPPEDTENSOR object goes out of scope
 %    or is otherwise cleared, the memory map is automatically closed.
 %    You may also call the DELETE method to force clear the object.
+%    To keep the mapped data files, use MappedTensor(...,'Temporary',false)
 % 
 %    Tensor properties
 %    =================
@@ -90,6 +91,10 @@
 %
 %        MachineFormat: big-endian ('ieee-be') or little-endian ('ieee-le')
 %            If not specified, the machine-native format will be used.
+%
+%    For instance you may use:
+%
+%      M = MappedTensor('Filename','data.bin','Data',rand(100));
 %
 %    All the properties above may also be accessed after the MAPPEDTENSOR object
 %    has been created with the GET method. The Writable, Temporary, Data properties 
@@ -375,11 +380,11 @@ classdef MappedTensor < hgsetget
             nArg = nArg + 1;
 
           case 'filename'
-            if ischar(varargin{nArg+1})
+            if ischar(varargin{nArg+1}) && ~isempty(varargin{nArg+1})
               if ~isempty(dir(varargin{nArg+1}))
                 mtVar.Filename = varargin{nArg+1};
               else
-                error([ mfilename ' file ' varargin{nArg+1} ' is missing.' ])
+                disp([ mfilename ': file ' varargin{nArg+1} ' is missing.' ])
               end
             end
             vbKeepArg(nArg:nArg+1) = false;
@@ -387,11 +392,11 @@ classdef MappedTensor < hgsetget
             mtVar.Temporary = false;
 
           case {'filename_complex','strcmplxfilename','filenamecmplx' }
-            if ischar(varargin{nArg+1})
+            if ischar(varargin{nArg+1}) && ~isempty(varargin{nArg+1})
               if ~isempty(dir(varargin{nArg+1}))
                 mtVar.FilenameCmplx = varargin{nArg+1};
               else
-                error([ mfilename ' file ' varargin{nArg+1} ' is missing.' ])
+                disp([ mfilename ': file ' varargin{nArg+1} ' is missing.' ])
               end
             end
             vbKeepArg(nArg:nArg+1) = false;
@@ -1108,7 +1113,7 @@ classdef MappedTensor < hgsetget
 
       % - Generate a structure containing only the pertinent properties
       sVar.Filename         = mtVar.Filename;
-      sVar.FilenameCmplx = mtVar.FilenameCmplx;
+      sVar.FilenameCmplx    = mtVar.FilenameCmplx;
       sVar.Temporary        = false;
       sVar.Format           = mtVar.Format;
       sVar.vnDimensionOrder = mtVar.vnDimensionOrder;
@@ -1136,6 +1141,7 @@ classdef MappedTensor < hgsetget
     % LOADOBJ Load filter for objects.
 
       if isempty(sSavedVar), mtVar = []; return; end
+      
       % compute the initial size of object
       vnOriginalSize = sSavedVar.vnOriginalSize; %#ok<PROP>
       vnOriginalSize(end+1:numel(sSavedVar.vnDimensionOrder)) = 1; %#ok<PROP>
