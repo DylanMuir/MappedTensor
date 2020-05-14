@@ -1,5 +1,10 @@
-function newVar = copyobj(mtVar)
+function newVar = copyobj(mtVar, varargin)
   % COPYOBJ Make deep copy of array.
+  %   B = COPYOBJ(A) creates a full copy of A into B. Mapped files are 
+  %   duplicated.
+  %
+  %   B = COPYOBJ(A, 'PROP1',VALUE1, ...) makes a copy with specific properties,
+  %   such as 'TempDir', 'Writable', etc.
   %
   % Example: m=MappedTensor(100*rand(10)); n=copyobj(m); isequal(m,n)
 
@@ -8,7 +13,7 @@ function newVar = copyobj(mtVar)
   % handle array of objects
   if numel(mtVar) > 1
     for index=1:numel(mtVar)
-      newVar = [ newVar copyobj(mtVar(index)) ];
+      newVar = [ newVar copyobj(mtVar(index), varargin{:}) ];
     end
     return
   end
@@ -52,7 +57,7 @@ function newVar = copyobj(mtVar)
     'Offset',           mtVar.Offset, ...
     'Size',             vnSize };
     
-  newVar = MappedTensor(args{:}); % build new object
+  newVar = MappedTensor(args{:}, varargin{:}); % build new object
 
   newVar.vnOriginalSize   = mtVar.vnOriginalSize;
   newVar.vnDimensionOrder = mtVar.vnDimensionOrder;
