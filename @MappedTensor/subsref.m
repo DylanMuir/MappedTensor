@@ -12,7 +12,7 @@ function v = subsref(mtVar, subs)
 % Example: m=MappedTensor(eye(5)); m(1) == 1
 
   if ischar(subs) 
-    subs = substruct('.',subs)
+    subs = substruct('.',subs);
   elseif isnumeric(subs)
     subs = substruct('()',{ subs });
   end

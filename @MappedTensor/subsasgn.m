@@ -10,7 +10,7 @@ function [mtVar] = subsasgn(mtVar, S, tfData)
 %
 % Example: m=MappedTensor(eye(5)); m(1) = 2; m(1) == 2
   if ischar(S) 
-    S = substruct('.',S)
+    S = substruct('.',S);
   elseif isnumeric(S)
     S = substruct('()',{ S });
   end

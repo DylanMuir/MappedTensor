@@ -1,5 +1,4 @@
 % MAPPEDTENSOR Construct memory-mapped file object.
-% MAPPEDTENSOR Construct memory-mapped file object.
 %    The MAPPEDTENSOR object allows to handle data sets larger than the available 
 %    memory. The variable can be passed around BY REFERENCE, indexed and
 %    written to without allocating space for the entire variable in Matlab. Note
@@ -219,7 +218,7 @@
 %
 % revamped by E. Farhi <emmanuel.farhi@synchrotron-soleil.fr>, May 2020.
 
-classdef MappedTensor < hgsetget
+classdef MappedTensor < handle
   properties % public, in sync with memmapfile
     Filename ='';;        % Binary data file on disk (real part of tensor)
     FilenameCmplx='';     % Binary data file on disk (complex part of tensor)
