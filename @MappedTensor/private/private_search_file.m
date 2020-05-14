@@ -1,6 +1,6 @@
 function filename = private_search_file(filename)
 
-  if isempty(filename) || ~ischar(filename) || ~isdir(filename), return; end
+  if isempty(filename) || ~ischar(filename) || ~isempty(dir(filename)), return; end
 
   % file is absent. Search for it
   newfile = which(filename); % Matlab path ?
