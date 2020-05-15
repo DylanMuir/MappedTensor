@@ -4,6 +4,8 @@ function s = set(s, varargin)
 %    property/field in the structure.  
 % 
 %    SET(S) displays all structure field names.
+%
+% Example: a=MappedTensor(peaks); set(a,'Format','uint8'); isinteger(a)
 
   field='';
   value=[];

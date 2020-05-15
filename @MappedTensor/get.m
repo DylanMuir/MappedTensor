@@ -5,6 +5,8 @@ function v = get(s, varargin)
 %    return a cell array of values.  
 % 
 %    GET(S) displays all object field names.
+%
+% Example: a=MappedTensor(peaks); ischar(get(a,'Format'))
 
   if nargin == 1, field=''; else field = varargin; end
   if isempty(field), v = fieldnames(s); return; end

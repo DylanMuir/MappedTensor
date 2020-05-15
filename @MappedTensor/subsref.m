@@ -9,7 +9,7 @@ function v = subsref(mtVar, subs)
 %
 %   M.field accesses the property 'field' in object M.
 %
-% Example: m=MappedTensor(eye(5)); m(1) == 1
+% Example: % Example: m=MappedTensor(eye(5)); subsref(m,1) == 1 % same as m(1)
 
   if ischar(subs) 
     subs = substruct('.',subs);

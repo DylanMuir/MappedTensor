@@ -878,9 +878,13 @@ classdef MappedTensor < handle
       
     % uplus - METHOD Overloaded uplus operator (+mtVar)
     function [mtVar] = uplus(mtVar)
-    % +  Unary plus.
-    
-       % - ...nothing to do?
+      %  +  Unary plus.
+      %    +A for objects is a copy of A. 
+      %    A new object is created, with same content (same as COPYOBJ).
+      %
+      %    B = UPLUS(A) is called for the syntax '+A'.
+      %
+      % Example: a=MappedTensor(peaks); ~isempty(+a)
     end
 
     %% fileparts - METHOD Return the files that underlie this MappedTensor
