@@ -26,7 +26,7 @@ end
 
 if iscell(filename) && numel(filename) > 1
   for index=1:numel(filename)
-    mtVar = [ ntVar load(mt0, filename{index}) ];
+    mtVar = [ mtVar load(mt0, filename{index}) ];
   end
   return
 end
