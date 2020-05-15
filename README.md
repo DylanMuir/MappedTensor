@@ -170,12 +170,12 @@ with the following data formats.
 
 | Extension         | Description               |
 |-------------------|---------------------------|
-| EDF               | ESRF Data Format          |
-| POS               | Atom Probe Tomography     |
-| NPY               | Python NumPy array        |
-| MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
-| MAR               | MAR CCD image             |
-| IMG MCCD          | ADSC X-ray detector image |
+| EDF               | ESRF Data Format  (2D)        |
+| POS               | Atom Probe Tomography  (4 columns)   |
+| NPY               | Python NumPy array  (nD)      |
+| MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map (3D) |
+| MAR               | MAR CCD image (2D)            |
+| IMG MCCD          | ADSC X-ray detector image SMV (2D) |
 
 ## Using the array
 
@@ -315,7 +315,7 @@ A list of available methods is shown below.
 | norm  |  Matrix or tensor norm. (unary op) |
 | not  |  ~ Logical NOT. (unary op) |
 | notify  |  Notify listeners of event. |
-| numel  |  Number of object in a vector. The number of elements in a single tensor is obtailed with `prod(size(M))` |
+| numel  |  Number of objects in a vector. Use `prod(size(M))` or `numel2` for number of elements in an object. |
 | numel2  |  NUMEL2 Number of elements in an array, same as `prod(size(M))` |
 | or  |  | Logical OR. (binary op) |
 | pack | Compress mapped data files |
@@ -352,7 +352,7 @@ A list of available methods is shown below.
 | uint8  |  Convert tensor representation to unsigned 8-bit integer. |
 | uminus  |  - Unary minus. (unary op) |
 | unpack | Decompress mapped data files |
-| uplus  |  + Unary plus. |
+| uplus  |  + Unary plus (copyobj). |
 | var  |  Variance. (unary op) |
 | version  |  Return class version |
 | xor  |  Logical EXCLUSIVE OR. (binary op) |
