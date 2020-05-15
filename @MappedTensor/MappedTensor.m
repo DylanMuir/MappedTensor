@@ -878,7 +878,7 @@ classdef MappedTensor < handle
       
     % uplus - METHOD Overloaded uplus operator (+mtVar)
     function [mtVar] = uplus(mtVar)
-      %  +  Unary plus.
+      %  +  Unary plus (copyobj).
       %    +A for objects is a copy of A. 
       %    A new object is created, with same content (same as COPYOBJ).
       %
