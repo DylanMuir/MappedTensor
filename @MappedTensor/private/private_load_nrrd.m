@@ -10,7 +10,6 @@ Descr=''; args = [];
 
 header = nrrdread(filename);
 
-
 Descr= 'Nearly Raw Raster Data';
 args = {
   'Offset',         header.Offset, ...
@@ -192,22 +191,7 @@ switch (meta.encoding)
   data = fread(fidIn, inf, [datatype '=>' datatype]);
   
  case {'gzip', 'gz'}
-  tmpBase = tempname();
-  tmpFile = [tmpBase '.gz'];
-  fidTmp = fopen(tmpFile, 'wb');
-  assert(fidTmp > 3, 'Could not open temporary file for GZIP decompression')
-  
-  tmp = fread(fidIn, inf, 'uint8=>uint8');
-  fwrite(fidTmp, tmp, 'uint8');
-  fclose(fidTmp);
-  
-  gunzip(tmpFile)
-  
-  fidTmp = fopen(tmpBase, 'rb');
-  cleaner = onCleanup(@() fclose(fidTmp));
-  
-  meta.encoding = 'raw';
-  data = readData(fidTmp, meta, datatype);
+  error('Compressed NRRD is not supported')
   
  case {'txt', 'text', 'ascii'}
   
