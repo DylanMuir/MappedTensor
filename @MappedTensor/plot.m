@@ -3,6 +3,8 @@ function h = plot(a, varargin)
 %   H = PLOT(M) plots the array M as a vector, matrix/surface, or volume.
 %   Higher dimension tensors plot a projection.
 %
+%   PLOT(..., 'PROP1',VALUE1,...) uses specified plot properties.
+%
 % Example: h=plot(MappedTensor(rand(100))); close(gcf); 1
 
 h = [];
@@ -22,6 +24,16 @@ else
 end
 signal = squeeze(double(signal));
 
+% handle special 'log' option
+for index=1:numel(varargin)
+  if ischar(varargin{index}) && strcmp(varargin{index}, 'log')
+    varargin(index) = [];
+    signal = signal - min(signal(:));
+    signal(signal <=0) = nan;
+    signal = log10(signal);
+  end
+end
+
 if ~isempty(inputname(1))
   iname = inputname(1);
 else
@@ -39,9 +51,9 @@ name = strtrim(sprintf('%s %s%s [%s] MappedTensor', ...
 
 % call the single plot method
 try
-  h = iFunc_plot(name, signal);
+  h = single_plot(name, signal, varargin{:});
   if ~isempty(h)
-    h = iFunc_plot_menu(h, a, name);
+    h = single_plot_menu(h, a, name);
   end
 catch ME
   warning(getReport(ME))
@@ -51,7 +63,7 @@ end
 
 % ------------------------------------------------------------------------------
 % simple plot of the array
-function h=iFunc_plot(name, signal, varargin)
+function h=single_plot(name, signal, varargin)
 % this internal function plots a single model, 1D, 2D or 3D.
 h=[];
 if isempty(signal) || isscalar(signal)
@@ -74,7 +86,7 @@ end
 set(h, 'DisplayName', name);
 
 %-------------------------------------------------------------------------------
-function h=iFunc_plot_menu(h, a, name)
+function h=single_plot_menu(h, a, name)
 % contextual menu for the single object being displayed
 % internal functions must be avoided as it uses LOTS of memory
 
