@@ -290,9 +290,13 @@ function [mtNewVar] = arrayfun(mtVar, fhFunction, varargin)
       end
 
       % handle early return with single chunk
-      if bEarlyReturn && ~isempty(tData) && any(tData)
-        mtNewVar = tData;
-        return;
+      if bEarlyReturn
+        if ~isempty(tData) && any(tData(:))
+          mtNewVar = tData;
+          return;
+        else
+          continue;
+        end
       end
 
       % - Write results

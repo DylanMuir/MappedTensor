@@ -3,6 +3,8 @@ function h = plot(a, varargin)
 %   H = PLOT(M) plots the array M as a vector, matrix/surface, or volume.
 %   Higher dimension tensors plot a projection.
 %
+%   PLOT(...,'log') transforms the signal in log-scale before plotting.
+%
 %   PLOT(..., 'PROP1',VALUE1,...) uses specified plot properties.
 %
 % Example: h=plot(MappedTensor(rand(100))); close(gcf); 1
