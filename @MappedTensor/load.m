@@ -9,7 +9,7 @@ function mtVar = load(mt0, filename)
 %   | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
 %   | MAR               | MAR CCD image             |
 %   | IMG MCCD          | ADSC X-ray detector image |
-%   | VOL               | RAW volume (tomography)   |
+%   | VOL (PAR)         | RAW volume (tomography)   |
 %
 % Not implemented
 %     VOL + PAR PyHST2 volume reconstruction

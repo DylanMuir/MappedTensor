@@ -176,6 +176,7 @@ with the following data formats.
 | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map (3D) |
 | MAR               | MAR CCD image (2D)            |
 | IMG MCCD          | ADSC X-ray detector image SMV (2D) |
+| VOL (PAR)         | PyHST2 tomography volume (3D) |
 
 ## Using the array
 
