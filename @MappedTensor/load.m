@@ -9,6 +9,7 @@ function mtVar = load(mt0, filename)
 %   | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
 %   | MAR               | MAR CCD image             |
 %   | IMG MCCD          | ADSC X-ray detector image |
+%   | VOL               | RAW volume (tomography)   |
 %
 % Not implemented
 %     VOL + PAR PyHST2 volume reconstruction
@@ -88,6 +89,8 @@ case {'.MAR','.MCCD'}
   [Descr,args,header] = private_load_mar(filename);
 case '.SMV' % ADSC (IMG/SMV)
   [Descr,args,header] = private_load_smv(filename);
+case '.VOL'
+  [Descr,args,header] = private_load_vol(filename);
 case '.IMG'
   % ADSC (IMG/SMV)
   [Descr,args,header] = private_load_smv(filename);
