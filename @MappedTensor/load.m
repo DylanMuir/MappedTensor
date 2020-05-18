@@ -4,12 +4,14 @@ function mtVar = load(mt0, filename)
 %   | Extension         | Description               |
 %   |-------------------|---------------------------|
 %   | EDF               | ESRF Data Format          |
-%   | POS               | Atom Probe Tomography     |
-%   | NPY               | Python NumPy array        |
+%   | IMG SMV           | ADSC X-ray detector image |
+%   | MAR MCCD          | MAR CCD image             |
 %   | MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map |
-%   | MAR               | MAR CCD image             |
-%   | IMG MCCD          | ADSC X-ray detector image |
-%   | VOL (PAR)         | RAW volume (tomography)   |
+%   | NRRD              | Nearly Raw Raster Data    |
+%   | NPY               | Python NumPy array        |
+%   | POS               | Atom Probe Tomography     |
+%   | VOL (PAR)         | PyHST2 volume (tomography)|
+%   
 %
 % Not implemented
 %     VOL + PAR PyHST2 volume reconstruction
@@ -78,22 +80,26 @@ end
 args = {}; header = [];
 switch upper(e)
 case '.EDF'
-  [Descr,args] = private_load_edf(filename);
-case '.POS'
-  [Descr,args] = private_load_pos(filename);
-case '.NPY'
-  [Descr,args,header] = private_load_npy(filename);
-case {'.MRC','.MAP','.CCP4','.RES'}
-  [Descr,args,header] = private_load_mrc(filename);
+  [Descr,args,header] = private_load_edf(filename);
+case '.IMG'
+  % ADSC (IMG/SMV)
+  [Descr,args,header] = private_load_smv(filename);
+  % could be a Mayo Clinic Analyze when supported...
 case {'.MAR','.MCCD'}
   [Descr,args,header] = private_load_mar(filename);
+case {'.MRC','.MAP','.CCP4','.RES'}
+  [Descr,args,header] = private_load_mrc(filename);
+case '.NPY'
+  [Descr,args,header] = private_load_npy(filename);
+case '.NRRD'
+  [Descr,args,header] = private_load_nrrd(filename);
+case '.POS'
+  [Descr,args,header] = private_load_pos(filename);
 case '.SMV' % ADSC (IMG/SMV)
   [Descr,args,header] = private_load_smv(filename);
 case '.VOL'
   [Descr,args,header] = private_load_vol(filename);
-case '.IMG'
-  % ADSC (IMG/SMV)
-  [Descr,args,header] = private_load_smv(filename);
+
 otherwise
   error([ mfilename ': unsupported file type ' upper(e) ' for ' filename ]);
 end

@@ -171,12 +171,13 @@ with the following data formats.
 | Extension         | Description               |
 |-------------------|---------------------------|
 | EDF               | ESRF Data Format  (2D)        |
-| POS               | Atom Probe Tomography  (4 columns)   |
-| NPY               | Python NumPy array  (nD)      |
-| MRC MAP CCP4 RES  | MRC MRC/CCP4/MAP electronic density map (3D) |
-| MAR               | MAR CCD image (2D)            |
-| IMG MCCD          | ADSC X-ray detector image SMV (2D) |
-| VOL (PAR)         | PyHST2 tomography volume (3D) |
+| IMG SMV      | [ADSC X-ray detector image SMV (2D)](https://strucbio.biologie.uni-konstanz.de/ccp4wiki/index.php/SMV_file_format) |
+| MAR MCCD          | MAR CCD image (2D)            |
+| MRC MAP CCP4 RES  | [MRC MRC/CCP4/MAP electronic density map (3D)](https://www.ccpem.ac.uk/mrc_format/mrc2014.php) |
+| NPY               | [Python NumPy array (nD)](https://numpy.org/devdocs/reference/generated/numpy.lib.format.html)      |
+| NRRD              | [Nearly Raw Raster Data](http://teem.sourceforge.net/nrrd/index.html)    |
+| POS               | [Atom Probe Tomography  (4 columns)](https://github.com/oscarbranson/apt-tools/blob/master/file-format-info.pdf)   |
+| VOL (PAR)         | [PyHST2 tomography volume (3D)](http://ftp.esrf.fr/scisoft/PYHST2/output_format.html) |
 
 ## Using the array
 
